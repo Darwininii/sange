@@ -1,0 +1,32 @@
+export const demoUsers = [
+  {
+    id: 1,
+    name: 'Administrador',
+    lastName: 'Demo',
+    nickname: 'administrador-demo',
+    email: 'darwninoe@gmail.com',
+    password: '123456789',
+    role: 'admin',
+    roleLabel: 'Administrador',
+  },
+  {
+    id: 2,
+    name: 'Cajero',
+    lastName: 'Demo',
+    nickname: 'cajero-demo',
+    email: 'cajero@gmail.com',
+    password: '123456789',
+    role: 'cashier',
+    roleLabel: 'Cajero',
+  },
+  {
+    id: 3,
+    name: 'Tecnico',
+    lastName: 'Demo',
+    nickname: 'tecnico-demo',
+    email: 'tecnico@gmail.com',
+    password: '123456789',
+    role: 'technician',
+    roleLabel: 'Tecnico',
+  },
+]
