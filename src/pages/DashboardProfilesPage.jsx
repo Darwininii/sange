@@ -3,11 +3,10 @@ import { useNavigate } from '@tanstack/react-router'
 import DashboardLayout from '../components/layout/DashboardLayout'
 import Loader from '../hooks/Loader'
 import appToast from '../hooks/appToast'
-import PageHeader from '../hooks/PageHeader'
 import CustomBadge from '../shared/CustomBadge'
+import DashboardListSection from '../shared/DashboardListSection'
 import AppDialog from '../shared/dialog'
 import Pagination from '../shared/Pagination'
-import AppButton from '../shared/AppButton'
 import InputProfile from '../shared/InputProfile'
 import ProfileActions from '../shared/ProfileActions'
 import YesONo from '../shared/YesONo'
@@ -450,235 +449,220 @@ function DashboardProfilesPage() {
 
   return (
     <DashboardLayout user={user} onLogout={handleLogout}>
-      <div className="mx-auto max-w-7xl">
-        <PageHeader title="Gestion de perfiles" />
+      <DashboardListSection
+        title="Gestion de perfiles"
+        sectionTitle="Perfiles registrados"
+        description="Las contraseñas no son visibles. Solo puedes reemplazarlas."
+        createLabel="Crear perfil"
+        onCreate={() => setIsCreateDialogOpen(true)}
+        footer={
+          <>
+            <AppDialog
+              open={isCreateDialogOpen}
+              title="Crear perfil"
+              onOpenChange={(open) => {
+                setIsCreateDialogOpen(open)
 
-        <section className="mt-8 rounded-4xl bg-surface p-6 shadow-sm ring-1 ring-border">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <h3 className="font-display text-2xl font-semibold text-foreground">
-                Perfiles registrados
-              </h3>
-              <p className="mt-1 text-sm text-foreground/55">
-                Las contraseñas no son visibles. Solo puedes reemplazarlas.
-              </p>
-            </div>
-            <AppButton
-              effect="zoomIn"
-              className="bg-[#1a2340] font-black text-white hover:bg-gray-950 dark:bg-primary/90 dark:text-black"
-              onClick={() => setIsCreateDialogOpen(true)}
+                if (!open) {
+                  setCreateNicknameSuffix('')
+                }
+              }}
             >
-              Crear perfil
-            </AppButton>
-          </div>
+              <InputProfile
+                mode="create"
+                values={profileForm}
+                nicknameSuffix={createNicknameSuffix}
+                onNicknameSuffixChange={setCreateNicknameSuffix}
+                profiles={profiles}
+                isSubmitting={isSubmitting}
+                onChange={handleFormFieldChange(setProfileForm)}
+                onRoleChange={handleFormRoleChange(setProfileForm)}
+                onSubmit={handleCreateProfile}
+                submitLabel="Crear perfil"
+              />
+            </AppDialog>
 
-          <div className="mt-6">
-            {isLoading ? (
-              <div className="flex justify-center rounded-3xl bg-background px-5 py-8">
-                <Loader
-                  label="Cargando perfiles..."
-                  className="text-foreground/55 [&>svg]:text-black/70 dark:[&>svg]:text-white/70"
+            <AppDialog
+              open={Boolean(passwordProfile)}
+              title={`Cambiar contraseña de ${formatProfileName(passwordProfile)}`}
+              onOpenChange={(open) => {
+                if (!open) {
+                  setPasswordProfile(null)
+                  setPasswordForm('')
+                }
+              }}
+            >
+              <div className="mb-5 border-b border-border pb-5">
+                <p className="mb-3 text-sm font-semibold text-black/70 dark:text-white/70">
+                  ¿Qué quieres hacer?
+                </p>
+                <ProfileActions
+                  profile={passwordProfile}
+                  exclude="password"
+                  isSubmitting={isSubmitting}
+                  {...profileActionHandlers}
                 />
               </div>
-            ) : (
-              <Table
-                footer={
-                  profiles.length > 0 ? (
-                    <Pagination
-                      page={page}
-                      totalPages={totalPages}
-                      onPageChange={setPage}
-                      pageSize={pageSize}
-                      onPageSizeChange={setPageSize}
-                    />
-                  ) : null
+              <InputProfile
+                mode="password"
+                values={{ password: passwordForm }}
+                isSubmitting={isSubmitting}
+                onChange={(event) => setPasswordForm(event.target.value)}
+                onSubmit={handleChangePassword}
+                submitLabel="Cambiar contraseña"
+              />
+            </AppDialog>
+
+            <AppDialog
+              open={Boolean(editProfile)}
+              title={`Editar perfil de ${formatProfileName(editProfile)}`}
+              onOpenChange={(open) => {
+                if (!open) {
+                  setEditProfile(null)
                 }
-              >
-                <TableHeader>
-                  <TableRow className="hover:bg-background">
-                    <TableHead>Usuario</TableHead>
-                    <TableHead>Rol</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead className="text-right">Acciones</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {visibleProfiles.map((profile) => (
-                    <TableRow key={profile.id}>
-                      <TableCell>
-                        <div>
-                          <p className="font-bold text-foreground">
-                            {formatProfileName(profile)}
-                          </p>
-                          <p className="text-sm text-foreground/55">
-                            {profile.email}
-                          </p>
-                          <p className="text-xs text-foreground/45">
-                            Credencial: {profile.nickname || 'Sin credencial'}
-                          </p>
-                          <p className="text-xs text-foreground/45">
-                            Cedula: {profile.identification || 'Sin cedula'}
-                          </p>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <CustomBadge
-                          color="blue"
-                          label={roleLabels[profile.role] ?? profile.role}
-                        />
-                      </TableCell>
-                      <TableCell>
-                        <CustomBadge
-                          color={profile.access_revoked ? 'red' : 'green'}
-                          label={profile.access_revoked ? 'Revocado' : 'Activo'}
-                        />
-                      </TableCell>
-                      <TableCell>
-                        <ProfileActions
-                          profile={profile}
-                          isSubmitting={isSubmitting}
-                          className="justify-end"
-                          {...profileActionHandlers}
-                        />
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            )}
-          </div>
-        </section>
+              }}
+            >
+              <div className="mb-5 border-b border-border pb-5">
+                <p className="mb-3 text-sm font-semibold text-black/70 dark:text-white/70">
+                  ¿Qué quieres hacer?
+                </p>
+                <ProfileActions
+                  profile={editProfile}
+                  exclude="edit"
+                  isSubmitting={isSubmitting}
+                  {...profileActionHandlers}
+                />
+              </div>
+              <InputProfile
+                mode="edit"
+                values={editForm}
+                nicknameSuffix={editNicknameSuffix}
+                onNicknameSuffixChange={setEditNicknameSuffix}
+                profiles={profiles}
+                excludeProfileId={editProfile?.id}
+                isSubmitting={isSubmitting}
+                onChange={handleFormFieldChange(setEditForm)}
+                onRoleChange={handleFormRoleChange(setEditForm)}
+                onSubmit={handleUpdateProfile}
+                submitLabel="Guardar cambios"
+              />
+            </AppDialog>
 
-        <AppDialog
-          open={isCreateDialogOpen}
-          title="Crear perfil"
-          onOpenChange={(open) => {
-            setIsCreateDialogOpen(open)
-
-            if (!open) {
-              setCreateNicknameSuffix('')
-            }
-          }}
-        >
-          <InputProfile
-            mode="create"
-            values={profileForm}
-            nicknameSuffix={createNicknameSuffix}
-            onNicknameSuffixChange={setCreateNicknameSuffix}
-            profiles={profiles}
-            isSubmitting={isSubmitting}
-            onChange={handleFormFieldChange(setProfileForm)}
-            onRoleChange={handleFormRoleChange(setProfileForm)}
-            onSubmit={handleCreateProfile}
-            submitLabel="Crear perfil"
-          />
-        </AppDialog>
-
-        <AppDialog
-          open={Boolean(passwordProfile)}
-          title={`Cambiar contraseña de ${formatProfileName(passwordProfile)}`}
-          onOpenChange={(open) => {
-            if (!open) {
-              setPasswordProfile(null)
-              setPasswordForm('')
-            }
-          }}
-        >
-          <div className="mb-5 border-b border-border pb-5">
-            <p className="mb-3 text-sm font-semibold text-black/70 dark:text-white/70">
-              ¿Qué quieres hacer?
-            </p>
-            <ProfileActions
-              profile={passwordProfile}
-              exclude="password"
+            <YesONo
+              open={Boolean(reactivateProfile)}
+              title="Activar permisos"
               isSubmitting={isSubmitting}
-              {...profileActionHandlers}
+              description={`El usuario ${formatProfileName(reactivateProfile)} volverá a estar activo.`}
+              onConfirm={handleReactivateAccess}
+              onOpenChange={(open) => {
+                if (!open) {
+                  setReactivateProfile(null)
+                }
+              }}
+            />
+
+            <YesONo
+              open={Boolean(revokeProfile)}
+              title="Revocar permisos"
+              isSubmitting={isSubmitting}
+              description={`El usuario ${formatProfileName(revokeProfile)} perderá el acceso a la plataforma.`}
+              onConfirm={handleRevokeAccess}
+              onOpenChange={(open) => {
+                if (!open) {
+                  setRevokeProfile(null)
+                }
+              }}
+            />
+
+            <YesONo
+              open={Boolean(deleteProfile)}
+              title="Eliminar perfil"
+              isSubmitting={isSubmitting}
+              description={`El perfil de ${formatProfileName(deleteProfile)} se eliminará de forma permanente y no podrá recuperarse.`}
+              onConfirm={handleDeleteRevokedProfile}
+              onOpenChange={(open) => {
+                if (!open) {
+                  setDeleteProfile(null)
+                }
+              }}
+            />
+          </>
+        }
+      >
+        {isLoading ? (
+          <div className="flex justify-center rounded-3xl bg-background px-5 py-8">
+            <Loader
+              label="Cargando perfiles..."
+              className="text-foreground/55 [&>svg]:text-black/70 dark:[&>svg]:text-white/70"
             />
           </div>
-          <InputProfile
-            mode="password"
-            values={{ password: passwordForm }}
-            isSubmitting={isSubmitting}
-            onChange={(event) => setPasswordForm(event.target.value)}
-            onSubmit={handleChangePassword}
-            submitLabel="Cambiar contraseña"
-          />
-        </AppDialog>
-
-        <AppDialog
-          open={Boolean(editProfile)}
-          title={`Editar perfil de ${formatProfileName(editProfile)}`}
-          onOpenChange={(open) => {
-            if (!open) {
-              setEditProfile(null)
+        ) : (
+          <Table
+            footer={
+              profiles.length > 0 ? (
+                <Pagination
+                  page={page}
+                  totalPages={totalPages}
+                  onPageChange={setPage}
+                  pageSize={pageSize}
+                  onPageSizeChange={setPageSize}
+                />
+              ) : null
             }
-          }}
-        >
-          <div className="mb-5 border-b border-border pb-5">
-            <p className="mb-3 text-sm font-semibold text-black/70 dark:text-white/70">
-              ¿Qué quieres hacer?
-            </p>
-            <ProfileActions
-              profile={editProfile}
-              exclude="edit"
-              isSubmitting={isSubmitting}
-              {...profileActionHandlers}
-            />
-          </div>
-          <InputProfile
-            mode="edit"
-            values={editForm}
-            nicknameSuffix={editNicknameSuffix}
-            onNicknameSuffixChange={setEditNicknameSuffix}
-            profiles={profiles}
-            excludeProfileId={editProfile?.id}
-            isSubmitting={isSubmitting}
-            onChange={handleFormFieldChange(setEditForm)}
-            onRoleChange={handleFormRoleChange(setEditForm)}
-            onSubmit={handleUpdateProfile}
-            submitLabel="Guardar cambios"
-          />
-        </AppDialog>
-
-        <YesONo
-          open={Boolean(reactivateProfile)}
-          title="Activar permisos"
-          isSubmitting={isSubmitting}
-          description={`El usuario ${formatProfileName(reactivateProfile)} volverá a estar activo.`}
-          onConfirm={handleReactivateAccess}
-          onOpenChange={(open) => {
-            if (!open) {
-              setReactivateProfile(null)
-            }
-          }}
-        />
-
-        <YesONo
-          open={Boolean(revokeProfile)}
-          title="Revocar permisos"
-          isSubmitting={isSubmitting}
-          description={`El usuario ${formatProfileName(revokeProfile)} perderá el acceso a la plataforma.`}
-          onConfirm={handleRevokeAccess}
-          onOpenChange={(open) => {
-            if (!open) {
-              setRevokeProfile(null)
-            }
-          }}
-        />
-
-        <YesONo
-          open={Boolean(deleteProfile)}
-          title="Eliminar perfil"
-          isSubmitting={isSubmitting}
-          description={`El perfil de ${formatProfileName(deleteProfile)} se eliminará de forma permanente y no podrá recuperarse.`}
-          onConfirm={handleDeleteRevokedProfile}
-          onOpenChange={(open) => {
-            if (!open) {
-              setDeleteProfile(null)
-            }
-          }}
-        />
-      </div>
+          >
+            <TableHeader>
+              <TableRow className="hover:bg-background">
+                <TableHead>Usuario</TableHead>
+                <TableHead>Rol</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead className="text-right">Acciones</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {visibleProfiles.map((profile) => (
+                <TableRow key={profile.id}>
+                  <TableCell>
+                    <div>
+                      <p className="font-bold text-foreground">
+                        {formatProfileName(profile)}
+                      </p>
+                      <p className="text-sm text-foreground/55">
+                        {profile.email}
+                      </p>
+                      <p className="text-xs text-foreground/45">
+                        Credencial: {profile.nickname || 'Sin credencial'}
+                      </p>
+                      <p className="text-xs text-foreground/45">
+                        Cedula: {profile.identification || 'Sin cedula'}
+                      </p>
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    <CustomBadge
+                      color="blue"
+                      label={roleLabels[profile.role] ?? profile.role}
+                    />
+                  </TableCell>
+                  <TableCell>
+                    <CustomBadge
+                      color={profile.access_revoked ? 'red' : 'green'}
+                      label={profile.access_revoked ? 'Revocado' : 'Activo'}
+                    />
+                  </TableCell>
+                  <TableCell>
+                    <ProfileActions
+                      profile={profile}
+                      isSubmitting={isSubmitting}
+                      className="justify-end"
+                      {...profileActionHandlers}
+                    />
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        )}
+      </DashboardListSection>
     </DashboardLayout>
   )
 }

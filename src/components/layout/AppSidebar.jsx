@@ -7,7 +7,7 @@ import { PiPackageFill } from 'react-icons/pi'
 import { BiSolidDashboard } from 'react-icons/bi'
 import { HiUserCircle } from 'react-icons/hi2'
 import { HiOutlineLogout } from "react-icons/hi";
-import { TbArrowBigUpFilled } from 'react-icons/tb'
+import { TbArrowBigUpFilled } from "react-icons/tb";
 import AppButton from '@/shared/AppButton'
 import AppSelect from '@/shared/select'
 import { cn } from '@/lib/utils'
@@ -35,7 +35,7 @@ const navigationItems = [
   },
   {
     label: 'Ordenes',
-    href: '#ordenes',
+    to: '/dashboard/orders',
     icon: IoIosListBox,
   },
   {
@@ -187,7 +187,10 @@ function AppSidebar({ user, onLogout }) {
                 <NavItem
                   key={item.label}
                   item={item}
-                  isActive={item.to === pathname}
+                  isActive={
+                    item.to === pathname ||
+                    (item.to !== '/dashboard' && pathname.startsWith(`${item.to}/`))
+                  }
                   isCollapsed={isCollapsed}
                 />
               ))}

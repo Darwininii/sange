@@ -1,5 +1,5 @@
 import AppDialog from '@/shared/dialog'
-import AppButton from '@/shared/AppButton'
+import ConfirmActions from '@/shared/ConfirmActions'
 
 function YesONo({
   open,
@@ -18,25 +18,14 @@ function YesONo({
           <p className="font-bold">¿Estás seguro que quieres hacer esta acción?</p>
           {description ? <p className="mt-2">{description}</p> : null}
         </div>
-        <div className="flex justify-end gap-3">
-          <AppButton
-            variant="outline"
-            effect="zoomIn"
-            disabled={isSubmitting}
-            className="border-x border-y-2 border-border bg-transparent text-foreground/70 hover:bg-surface hover:font-black"
-            onClick={() => onOpenChange?.(false)}
-          >
-            {cancelLabel}
-          </AppButton>
-          <AppButton
-            variant="success"
-            effect="zoomIn"
-            isLoading={isSubmitting}
-            onClick={onConfirm}
-          >
-            {confirmLabel}
-          </AppButton>
-        </div>
+        <ConfirmActions
+          variant="dialog"
+          cancelLabel={cancelLabel}
+          confirmLabel={confirmLabel}
+          isSubmitting={isSubmitting}
+          onCancel={() => onOpenChange?.(false)}
+          onConfirm={onConfirm}
+        />
       </div>
     </AppDialog>
   )

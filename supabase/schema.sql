@@ -89,3 +89,165 @@ using (public.is_admin());
 
 create index if not exists activity_logs_user_id_created_at_idx
 on public.activity_logs (user_id, created_at desc);
+
+create table if not exists public.orders (
+  id uuid primary key default gen_random_uuid(),
+  order_number bigserial not null unique,
+  client_name text not null,
+  client_phone text not null default '',
+  device text not null,
+  brand text not null default '',
+  model text not null default '',
+  serial_number text not null default '',
+  service_type text
+    check (
+      service_type is null
+      or service_type in ('installation', 'maintenance', 'review')
+    ),
+  service_condition text
+    check (
+      service_condition is null
+      or service_condition in ('warranty', 'billed', 'installation')
+    ),
+  issue text not null,
+  service_cost numeric(12, 2),
+  previous_service_notes text not null default '',
+  document_number text not null default '',
+  external_order_number text not null default '',
+  notes text not null default '',
+  status text not null default 'pending'
+    check (status in ('pending', 'in_progress', 'completed', 'cancelled')),
+  created_by uuid references auth.users(id) on delete set null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create index if not exists orders_created_at_idx
+on public.orders (created_at desc);
+
+create index if not exists orders_status_idx
+on public.orders (status);
+
+create or replace function public.set_orders_updated_at()
+returns trigger
+language plpgsql
+set search_path = public
+as $$
+begin
+  new.updated_at = now();
+  return new;
+end;
+$$;
+
+drop trigger if exists orders_set_updated_at on public.orders;
+
+create trigger orders_set_updated_at
+before update on public.orders
+for each row
+execute function public.set_orders_updated_at();
+
+create or replace function public.is_active_staff()
+returns boolean
+language sql
+security definer
+set search_path = public
+as $$
+  select exists (
+    select 1
+    from public.profiles
+    where id = auth.uid()
+      and access_revoked = false
+  );
+$$;
+
+alter table public.orders enable row level security;
+
+drop policy if exists "Active staff can read orders" on public.orders;
+drop policy if exists "Active staff can create orders" on public.orders;
+drop policy if exists "Active staff can update orders" on public.orders;
+
+create policy "Active staff can read orders"
+on public.orders
+for select
+to authenticated
+using (public.is_active_staff());
+
+create policy "Active staff can create orders"
+on public.orders
+for insert
+to authenticated
+with check (
+  public.is_active_staff()
+  and (created_by is null or created_by = auth.uid())
+);
+
+create policy "Active staff can update orders"
+on public.orders
+for update
+to authenticated
+using (public.is_active_staff())
+with check (public.is_active_staff());
+
+grant select, insert, update on public.orders to authenticated;
+grant usage, select on sequence public.orders_order_number_seq to authenticated;
+
+revoke execute on function public.is_active_staff() from anon, public;
+grant execute on function public.is_active_staff() to authenticated;
+
+create index if not exists orders_document_number_idx
+on public.orders (document_number);
+
+create index if not exists orders_external_order_number_idx
+on public.orders (external_order_number);
+
+alter table public.orders
+  add column if not exists assigned_technician_id uuid references public.profiles(id) on delete set null;
+
+create index if not exists orders_assigned_technician_id_idx
+on public.orders (assigned_technician_id);
+
+drop policy if exists "Active staff can read technician profiles" on public.profiles;
+
+create policy "Active staff can read technician profiles"
+on public.profiles
+for select
+to authenticated
+using (
+  public.is_active_staff()
+  and role = 'technician'
+  and access_revoked = false
+);
+
+create table if not exists public.order_notes (
+  id uuid primary key default gen_random_uuid(),
+  order_id uuid not null references public.orders(id) on delete cascade,
+  user_id uuid not null references auth.users(id) on delete cascade,
+  author_name text not null default '',
+  body text not null,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists order_notes_order_id_created_at_idx
+on public.order_notes (order_id, created_at asc);
+
+alter table public.order_notes enable row level security;
+
+drop policy if exists "Active staff can read order notes" on public.order_notes;
+drop policy if exists "Active staff can create order notes" on public.order_notes;
+
+create policy "Active staff can read order notes"
+on public.order_notes
+for select
+to authenticated
+using (public.is_active_staff());
+
+create policy "Active staff can create order notes"
+on public.order_notes
+for insert
+to authenticated
+with check (
+  public.is_active_staff()
+  and user_id = auth.uid()
+);
+
+grant select, insert on public.order_notes to authenticated;

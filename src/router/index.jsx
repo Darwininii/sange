@@ -10,6 +10,9 @@ import DashboardMyProfilePage from '../pages/DashboardMyProfilePage'
 import DashboardPage from '../pages/DashboardPage'
 import DashboardProfilesPage from '../pages/DashboardProfilesPage'
 import LoginPage from '../pages/LoginPage'
+import EditOrderPage from '../pages/EditOrderPage'
+import NewOrderPage from '../pages/NewOrderPage'
+import OrdersPage from '../pages/OrdersPage'
 import { useAuthStore } from '../store/authStore'
 import { getCurrentSessionUser } from '../utils/auth'
 
@@ -98,12 +101,42 @@ const dashboardProfilesRoute = createRoute({
   component: DashboardProfilesPage,
 })
 
+const dashboardOrdersRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/dashboard/orders',
+  beforeLoad: async () => {
+    await requireDashboardUser()
+  },
+  component: OrdersPage,
+})
+
+const dashboardNewOrderRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/dashboard/orders/new',
+  beforeLoad: async () => {
+    await requireDashboardUser()
+  },
+  component: NewOrderPage,
+})
+
+const dashboardEditOrderRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/dashboard/orders/edit/$orderId',
+  beforeLoad: async () => {
+    await requireDashboardUser()
+  },
+  component: EditOrderPage,
+})
+
 const routeTree = rootRoute.addChildren([
   loginRoute,
   dashboardRoute,
   dashboardMyProfileRoute,
   dashboardHistoryRoute,
   dashboardProfilesRoute,
+  dashboardOrdersRoute,
+  dashboardNewOrderRoute,
+  dashboardEditOrderRoute,
 ])
 
 export const router = createRouter({ routeTree })

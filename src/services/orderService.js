@@ -1,0 +1,287 @@
+import { isSupabaseConfigured, supabase } from '../lib/supabaseClient'
+
+export const INITIAL_ORDER_VALUES = {
+  clientName: '',
+  clientPhone: '',
+  device: '',
+  brand: '',
+  model: '',
+  serialNumber: '',
+  serviceType: '',
+  serviceCondition: '',
+  technicianId: '',
+  issue: '',
+  serviceCost: '',
+  previousServiceNotes: '',
+  documentNumber: '',
+  externalOrderNumber: '',
+  notes: '',
+}
+
+const ORDER_SELECT =
+  'id, order_number, client_name, client_phone, device, brand, model, serial_number, service_type, service_condition, assigned_technician_id, issue, service_cost, previous_service_notes, document_number, external_order_number, notes, status, created_by, created_at, updated_at'
+
+export function formatOrderId(orderNumber) {
+  return String(orderNumber).padStart(2, '0')
+}
+
+export function parseOrderNumber(orderId) {
+  const parsed = Number.parseInt(orderId, 10)
+  return Number.isFinite(parsed) ? parsed : null
+}
+
+export function getOrderFormValues(order) {
+  return {
+    clientName: order?.clientName ?? '',
+    clientPhone: order?.clientPhone ?? '',
+    device: order?.device ?? '',
+    brand: order?.brand ?? '',
+    model: order?.model ?? '',
+    serialNumber: order?.serialNumber ?? '',
+    serviceType: order?.serviceType ?? '',
+    serviceCondition: order?.serviceCondition ?? '',
+    technicianId: order?.technicianId ?? '',
+    issue: order?.issue ?? '',
+    serviceCost:
+      order?.serviceCost === null || order?.serviceCost === undefined
+        ? ''
+        : String(order.serviceCost),
+    previousServiceNotes: order?.previousServiceNotes ?? '',
+    documentNumber: order?.documentNumber ?? '',
+    externalOrderNumber: order?.externalOrderNumber ?? '',
+    notes: order?.notes ?? '',
+  }
+}
+
+function requireSupabase() {
+  if (!isSupabaseConfigured || !supabase) {
+    throw new Error('Supabase no esta configurado. Revisa VITE_SUPABASE_URL y VITE_SUPABASE_ANON_KEY.')
+  }
+
+  return supabase
+}
+
+function mapOrder(row) {
+  if (!row) {
+    return null
+  }
+
+  return {
+    id: formatOrderId(row.order_number),
+    uuid: row.id,
+    orderNumber: row.order_number,
+    clientName: row.client_name ?? '',
+    clientPhone: row.client_phone ?? '',
+    device: row.device ?? '',
+    brand: row.brand ?? '',
+    model: row.model ?? '',
+    serialNumber: row.serial_number ?? '',
+    serviceType: row.service_type ?? null,
+    serviceCondition: row.service_condition ?? null,
+    technicianId: row.assigned_technician_id ?? '',
+    issue: row.issue ?? '',
+    serviceCost: row.service_cost ?? null,
+    previousServiceNotes: row.previous_service_notes ?? '',
+    documentNumber: row.document_number ?? '',
+    externalOrderNumber: row.external_order_number ?? '',
+    notes: row.notes ?? '',
+    status: row.status ?? 'pending',
+    createdBy: row.created_by ?? null,
+    createdAt: row.created_at ?? null,
+    updatedAt: row.updated_at ?? null,
+  }
+}
+
+function toDbPayload(orderData) {
+  const condition = orderData.serviceCondition || null
+  const rawCost = String(orderData.serviceCost ?? '').trim()
+  const parsedCost = rawCost === '' ? null : Number(rawCost)
+
+  return {
+    client_name: orderData.clientName,
+    client_phone: orderData.clientPhone ?? '',
+    device: orderData.device,
+    brand: orderData.brand ?? '',
+    model: orderData.model ?? '',
+    serial_number: orderData.serialNumber ?? '',
+    service_type: orderData.serviceType || null,
+    service_condition: condition,
+    assigned_technician_id: orderData.technicianId || null,
+    issue: orderData.issue,
+    service_cost:
+      condition === 'billed' && Number.isFinite(parsedCost) ? parsedCost : null,
+    previous_service_notes:
+      condition === 'warranty' ? orderData.previousServiceNotes ?? '' : '',
+    document_number: orderData.documentNumber ?? '',
+    external_order_number: orderData.externalOrderNumber ?? '',
+    notes: orderData.notes ?? '',
+  }
+}
+
+export async function getOrders() {
+  const client = requireSupabase()
+
+  const { data, error } = await client
+    .from('orders')
+    .select(ORDER_SELECT)
+    .order('order_number', { ascending: false })
+
+  if (error) {
+    throw new Error(`No se pudieron cargar las ordenes: ${error.message}`)
+  }
+
+  return (data ?? []).map(mapOrder)
+}
+
+export async function getOrderByNumber(orderId) {
+  const client = requireSupabase()
+  const orderNumber = parseOrderNumber(orderId)
+
+  if (orderNumber === null) {
+    return null
+  }
+
+  const { data, error } = await client
+    .from('orders')
+    .select(ORDER_SELECT)
+    .eq('order_number', orderNumber)
+    .maybeSingle()
+
+  if (error) {
+    throw new Error(`No se pudo cargar la orden: ${error.message}`)
+  }
+
+  return mapOrder(data)
+}
+
+export async function createOrder(orderData, { createdBy } = {}) {
+  const client = requireSupabase()
+
+  const { data, error } = await client
+    .from('orders')
+    .insert({
+      ...toDbPayload(orderData),
+      created_by: createdBy ?? null,
+      status: 'pending',
+    })
+    .select(ORDER_SELECT)
+    .single()
+
+  if (error) {
+    throw new Error(`No se pudo crear la orden: ${error.message}`)
+  }
+
+  return mapOrder(data)
+}
+
+export async function updateOrder(orderId, orderData) {
+  const client = requireSupabase()
+  const orderNumber = parseOrderNumber(orderId)
+
+  if (orderNumber === null) {
+    throw new Error('Numero de orden invalido.')
+  }
+
+  const { data, error } = await client
+    .from('orders')
+    .update(toDbPayload(orderData))
+    .eq('order_number', orderNumber)
+    .select(ORDER_SELECT)
+    .maybeSingle()
+
+  if (error) {
+    throw new Error(`No se pudo actualizar la orden: ${error.message}`)
+  }
+
+  if (!data) {
+    throw new Error('No se encontro la orden para actualizar.')
+  }
+
+  return mapOrder(data)
+}
+
+export async function getTechnicians() {
+  const client = requireSupabase()
+
+  const { data, error } = await client
+    .from('profiles')
+    .select('id, name, last_name')
+    .eq('role', 'technician')
+    .eq('access_revoked', false)
+    .order('name', { ascending: true })
+
+  if (error) {
+    throw new Error(`No se pudieron cargar los tecnicos: ${error.message}`)
+  }
+
+  return (data ?? []).map((profile) => ({
+    value: profile.id,
+    label: [profile.name, profile.last_name].filter(Boolean).join(' ').trim() || 'Tecnico',
+  }))
+}
+
+function mapOrderNote(row) {
+  if (!row) {
+    return null
+  }
+
+  return {
+    id: row.id,
+    orderId: row.order_id,
+    userId: row.user_id,
+    body: row.body ?? '',
+    createdAt: row.created_at ?? null,
+    authorName: row.author_name?.trim() || 'Usuario',
+  }
+}
+
+export async function getOrderNotes(orderUuid) {
+  const client = requireSupabase()
+
+  if (!orderUuid) {
+    return []
+  }
+
+  const { data, error } = await client
+    .from('order_notes')
+    .select('id, order_id, user_id, author_name, body, created_at')
+    .eq('order_id', orderUuid)
+    .order('created_at', { ascending: true })
+
+  if (error) {
+    throw new Error(`No se pudieron cargar las notas: ${error.message}`)
+  }
+
+  return (data ?? []).map(mapOrderNote)
+}
+
+export async function createOrderNote(orderUuid, body, { userId, authorName } = {}) {
+  const client = requireSupabase()
+
+  if (!orderUuid || !userId) {
+    throw new Error('No se pudo registrar la nota.')
+  }
+
+  const trimmed = body.trim()
+
+  if (!trimmed) {
+    throw new Error('La nota no puede estar vacia.')
+  }
+
+  const { data, error } = await client
+    .from('order_notes')
+    .insert({
+      order_id: orderUuid,
+      user_id: userId,
+      author_name: authorName?.trim() || 'Usuario',
+      body: trimmed,
+    })
+    .select('id, order_id, user_id, author_name, body, created_at')
+    .single()
+
+  if (error) {
+    throw new Error(`No se pudo crear la nota: ${error.message}`)
+  }
+
+  return mapOrderNote(data)
+}
