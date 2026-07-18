@@ -114,7 +114,6 @@ create table if not exists public.orders (
   previous_service_notes text not null default '',
   document_number text not null default '',
   external_order_number text not null default '',
-  notes text not null default '',
   status text not null default 'pending'
     check (status in ('pending', 'in_progress', 'completed', 'cancelled')),
   created_by uuid references auth.users(id) on delete set null,
@@ -218,31 +217,31 @@ using (
   and access_revoked = false
 );
 
-create table if not exists public.order_notes (
+create table if not exists public.order_messages (
   id uuid primary key default gen_random_uuid(),
   order_id uuid not null references public.orders(id) on delete cascade,
   user_id uuid not null references auth.users(id) on delete cascade,
-  author_name text not null default '',
+  author_name text not null,
   body text not null,
   created_at timestamptz not null default now()
 );
 
-create index if not exists order_notes_order_id_created_at_idx
-on public.order_notes (order_id, created_at asc);
+create index if not exists order_messages_order_id_created_at_idx
+on public.order_messages (order_id, created_at asc);
 
-alter table public.order_notes enable row level security;
+alter table public.order_messages enable row level security;
 
-drop policy if exists "Active staff can read order notes" on public.order_notes;
-drop policy if exists "Active staff can create order notes" on public.order_notes;
+drop policy if exists "Active staff can read order messages" on public.order_messages;
+drop policy if exists "Active staff can create order messages" on public.order_messages;
 
-create policy "Active staff can read order notes"
-on public.order_notes
+create policy "Active staff can read order messages"
+on public.order_messages
 for select
 to authenticated
 using (public.is_active_staff());
 
-create policy "Active staff can create order notes"
-on public.order_notes
+create policy "Active staff can create order messages"
+on public.order_messages
 for insert
 to authenticated
 with check (
@@ -250,4 +249,4 @@ with check (
   and user_id = auth.uid()
 );
 
-grant select, insert on public.order_notes to authenticated;
+grant select, insert on public.order_messages to authenticated;

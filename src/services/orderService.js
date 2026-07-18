@@ -15,11 +15,10 @@ export const INITIAL_ORDER_VALUES = {
   previousServiceNotes: '',
   documentNumber: '',
   externalOrderNumber: '',
-  notes: '',
 }
 
 const ORDER_SELECT =
-  'id, order_number, client_name, client_phone, device, brand, model, serial_number, service_type, service_condition, assigned_technician_id, issue, service_cost, previous_service_notes, document_number, external_order_number, notes, status, created_by, created_at, updated_at'
+  'id, order_number, client_name, client_phone, device, brand, model, serial_number, service_type, service_condition, assigned_technician_id, issue, service_cost, previous_service_notes, document_number, external_order_number, status, created_by, created_at, updated_at'
 
 export function formatOrderId(orderNumber) {
   return String(orderNumber).padStart(2, '0')
@@ -49,7 +48,6 @@ export function getOrderFormValues(order) {
     previousServiceNotes: order?.previousServiceNotes ?? '',
     documentNumber: order?.documentNumber ?? '',
     externalOrderNumber: order?.externalOrderNumber ?? '',
-    notes: order?.notes ?? '',
   }
 }
 
@@ -84,7 +82,6 @@ function mapOrder(row) {
     previousServiceNotes: row.previous_service_notes ?? '',
     documentNumber: row.document_number ?? '',
     externalOrderNumber: row.external_order_number ?? '',
-    notes: row.notes ?? '',
     status: row.status ?? 'pending',
     createdBy: row.created_by ?? null,
     createdAt: row.created_at ?? null,
@@ -114,7 +111,6 @@ function toDbPayload(orderData) {
       condition === 'warranty' ? orderData.previousServiceNotes ?? '' : '',
     document_number: orderData.documentNumber ?? '',
     external_order_number: orderData.externalOrderNumber ?? '',
-    notes: orderData.notes ?? '',
   }
 }
 
@@ -220,7 +216,39 @@ export async function getTechnicians() {
   }))
 }
 
-function mapOrderNote(row) {
+function getFirstWord(value) {
+  return String(value ?? '')
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)[0] ?? ''
+}
+
+function toTitleWord(value) {
+  const word = getFirstWord(value).toLocaleLowerCase('es-CO')
+
+  if (!word) {
+    return ''
+  }
+
+  return word.charAt(0).toLocaleUpperCase('es-CO') + word.slice(1)
+}
+
+export function getChatAuthorName(user) {
+  const firstName = toTitleWord(user?.name)
+  const firstLastName = toTitleWord(user?.lastName)
+  return [firstName, firstLastName].filter(Boolean).join(' ') || 'Usuario'
+}
+
+export function formatChatAuthorName(value) {
+  return String(value ?? '')
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((word) => toTitleWord(word))
+    .join(' ') || 'Usuario'
+}
+
+function mapOrderMessage(row) {
   if (!row) {
     return null
   }
@@ -229,13 +257,13 @@ function mapOrderNote(row) {
     id: row.id,
     orderId: row.order_id,
     userId: row.user_id,
+    authorName: row.author_name?.trim() || 'Usuario',
     body: row.body ?? '',
     createdAt: row.created_at ?? null,
-    authorName: row.author_name?.trim() || 'Usuario',
   }
 }
 
-export async function getOrderNotes(orderUuid) {
+export async function getOrderMessages(orderUuid) {
   const client = requireSupabase()
 
   if (!orderUuid) {
@@ -243,33 +271,32 @@ export async function getOrderNotes(orderUuid) {
   }
 
   const { data, error } = await client
-    .from('order_notes')
+    .from('order_messages')
     .select('id, order_id, user_id, author_name, body, created_at')
     .eq('order_id', orderUuid)
     .order('created_at', { ascending: true })
 
   if (error) {
-    throw new Error(`No se pudieron cargar las notas: ${error.message}`)
+    throw new Error(`No se pudieron cargar los mensajes: ${error.message}`)
   }
 
-  return (data ?? []).map(mapOrderNote)
+  return (data ?? []).map(mapOrderMessage)
 }
 
-export async function createOrderNote(orderUuid, body, { userId, authorName } = {}) {
+export async function sendOrderMessage(orderUuid, body, { userId, authorName } = {}) {
   const client = requireSupabase()
+  const trimmed = String(body ?? '').trim()
 
   if (!orderUuid || !userId) {
-    throw new Error('No se pudo registrar la nota.')
+    throw new Error('No se pudo enviar el mensaje.')
   }
 
-  const trimmed = body.trim()
-
   if (!trimmed) {
-    throw new Error('La nota no puede estar vacia.')
+    throw new Error('El mensaje no puede estar vacio.')
   }
 
   const { data, error } = await client
-    .from('order_notes')
+    .from('order_messages')
     .insert({
       order_id: orderUuid,
       user_id: userId,
@@ -280,8 +307,36 @@ export async function createOrderNote(orderUuid, body, { userId, authorName } = 
     .single()
 
   if (error) {
-    throw new Error(`No se pudo crear la nota: ${error.message}`)
+    throw new Error(`No se pudo enviar el mensaje: ${error.message}`)
   }
 
-  return mapOrderNote(data)
+  return mapOrderMessage(data)
+}
+
+export function subscribeOrderMessages(orderUuid, onMessage) {
+  const client = requireSupabase()
+
+  if (!orderUuid) {
+    return () => {}
+  }
+
+  const channel = client
+    .channel(`order-chat:${orderUuid}`)
+    .on(
+      'postgres_changes',
+      {
+        event: 'INSERT',
+        schema: 'public',
+        table: 'order_messages',
+        filter: `order_id=eq.${orderUuid}`,
+      },
+      (payload) => {
+        onMessage?.(mapOrderMessage(payload.new))
+      },
+    )
+    .subscribe()
+
+  return () => {
+    client.removeChannel(channel)
+  }
 }

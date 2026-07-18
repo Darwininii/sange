@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from '@tanstack/react-router'
 import DashboardLayout from '../components/layout/DashboardLayout'
 import Loader from '../hooks/Loader'
@@ -6,8 +6,7 @@ import appToast from '../hooks/appToast'
 import PageHeader from '../hooks/PageHeader'
 import AppSelect from './select'
 import ConfirmActions from './ConfirmActions'
-import OrderNotesPanel from './OrderNotesPanel'
-import RichTextEditor from './RichTextEditor'
+import OrderChatPanel from './OrderChatPanel'
 import {
   SERVICE_CONDITION_OPTIONS,
   SERVICE_TYPE_OPTIONS,
@@ -44,10 +43,6 @@ function getErrorMessage(error, fallback) {
   return error instanceof Error ? error.message : fallback
 }
 
-function getAuthorName(user) {
-  return [user?.name, user?.lastName].filter(Boolean).join(' ').trim() || 'Usuario'
-}
-
 const modeConfig = {
   create: {
     title: 'Agregar Orden',
@@ -72,9 +67,43 @@ function OrderFormView({ mode = 'create', orderId = null }) {
   const [technicianOptions, setTechnicianOptions] = useState([])
   const [isLoadingOrder, setIsLoadingOrder] = useState(mode === 'edit')
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [chatHeight, setChatHeight] = useState(null)
+  const formRef = useRef(null)
   const config = modeConfig[mode] ?? modeConfig.create
   const isWarranty = form.serviceCondition === 'warranty'
   const isBilled = form.serviceCondition === 'billed'
+
+  useEffect(() => {
+    if (isLoadingOrder) {
+      return undefined
+    }
+
+    const formNode = formRef.current
+
+    if (!formNode || typeof ResizeObserver === 'undefined') {
+      return undefined
+    }
+
+    function syncChatHeight() {
+      const nextHeight = Math.round(formNode.getBoundingClientRect().height)
+
+      if (nextHeight > 0) {
+        setChatHeight(nextHeight)
+      }
+    }
+
+    syncChatHeight()
+
+    const observer = new ResizeObserver(() => {
+      syncChatHeight()
+    })
+
+    observer.observe(formNode)
+
+    return () => {
+      observer.disconnect()
+    }
+  }, [isLoadingOrder, isWarranty, isBilled])
 
   useEffect(() => {
     let cancelled = false
@@ -202,7 +231,6 @@ function OrderFormView({ mode = 'create', orderId = null }) {
       previousServiceNotes: form.previousServiceNotes.trim(),
       documentNumber: form.documentNumber.trim(),
       externalOrderNumber: form.externalOrderNumber.trim(),
-      notes: form.notes,
     }
 
     setIsSubmitting(true)
@@ -237,7 +265,7 @@ function OrderFormView({ mode = 'create', orderId = null }) {
 
   return (
     <DashboardLayout user={user} onLogout={handleLogout}>
-      <div className="mx-auto max-w-5xl">
+      <div className="mx-auto max-w-7xl">
         <PageHeader title="Gestion de ordenes" />
 
         <section className="mt-8 rounded-4xl border border-border bg-surface px-5 py-4 shadow-sm">
@@ -269,9 +297,10 @@ function OrderFormView({ mode = 'create', orderId = null }) {
             />
           </div>
         ) : (
-          <>
+          <div className="mt-6 grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(280px,380px)]">
             <form
-              className="mt-6 rounded-4xl bg-surface p-6 shadow-sm ring-1 ring-border"
+              ref={formRef}
+              className="rounded-4xl bg-surface p-6 shadow-sm ring-1 ring-border"
               onSubmit={handleSubmit}
             >
               <div className="grid gap-4 md:grid-cols-2">
@@ -311,6 +340,17 @@ function OrderFormView({ mode = 'create', orderId = null }) {
                     placeholder="Nombre del cliente"
                     onChange={handleChange}
                     required
+                  />
+                </label>
+
+                <label>
+                  <FieldLabel>Numero de documento</FieldLabel>
+                  <input
+                    className={FIELD_CLASS}
+                    name="documentNumber"
+                    value={form.documentNumber}
+                    placeholder="Ej. 417"
+                    onChange={handleChange}
                   />
                 </label>
 
@@ -431,17 +471,6 @@ function OrderFormView({ mode = 'create', orderId = null }) {
                 ) : null}
 
                 <label>
-                  <FieldLabel>Numero de documento</FieldLabel>
-                  <input
-                    className={FIELD_CLASS}
-                    name="documentNumber"
-                    value={form.documentNumber}
-                    placeholder="Ej. 417"
-                    onChange={handleChange}
-                  />
-                </label>
-
-                <label>
                   <FieldLabel>Orden externa (fabricante)</FieldLabel>
                   <input
                     className={FIELD_CLASS}
@@ -451,29 +480,21 @@ function OrderFormView({ mode = 'create', orderId = null }) {
                     onChange={handleChange}
                   />
                 </label>
-
-                <div className="md:col-span-2">
-                  <FieldLabel>Observaciones</FieldLabel>
-                  <RichTextEditor
-                    value={form.notes}
-                    placeholder="Observaciones adicionales de la orden"
-                    disabled={isSubmitting}
-                    onChange={(notes) =>
-                      setForm((currentForm) => ({ ...currentForm, notes }))
-                    }
-                  />
-                </div>
               </div>
             </form>
 
-            {mode === 'edit' && orderUuid ? (
-              <OrderNotesPanel
-                orderUuid={orderUuid}
-                userId={user?.id}
-                authorName={getAuthorName(user)}
-              />
-            ) : null}
-          </>
+            <OrderChatPanel
+              orderUuid={orderUuid}
+              orderLabel={mode === 'edit' ? orderId : ''}
+              currentUser={user}
+              style={
+                chatHeight
+                  ? { '--order-chat-height': `${chatHeight}px` }
+                  : undefined
+              }
+              className="h-[min(70vh,36rem)] max-h-[min(70vh,36rem)] lg:h-[var(--order-chat-height,36rem)] lg:max-h-[var(--order-chat-height,36rem)]"
+            />
+          </div>
         )}
       </div>
     </DashboardLayout>
