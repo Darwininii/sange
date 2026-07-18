@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
-import { GrSend } from "react-icons/gr";
+import { GrSend } from 'react-icons/gr'
 import appToast from '../hooks/appToast'
 import AppButton from './AppButton'
+import ChatComposer from './ChatComposer'
+import { isEmptyChatHtml } from './chatComposerUtils'
 import {
   formatChatAuthorName,
   getChatAuthorName,
@@ -26,6 +28,15 @@ function formatMessageTime(value) {
   }).format(new Date(value))
 }
 
+function MessageBody({ html, className }) {
+  return (
+    <div
+      className={cn('chat-message-body text-sm', className)}
+      dangerouslySetInnerHTML={{ __html: html }}
+    />
+  )
+}
+
 function OrderChatPanel({
   orderUuid = null,
   orderLabel = '',
@@ -38,17 +49,11 @@ function OrderChatPanel({
   const [isLoading, setIsLoading] = useState(Boolean(orderUuid))
   const [isSending, setIsSending] = useState(false)
   const listRef = useRef(null)
-  const inputRef = useRef(null)
+  const composerRef = useRef(null)
   const canChat = Boolean(orderUuid && currentUser?.id)
 
   function focusComposer() {
-    const input = inputRef.current
-
-    if (!input || input.disabled) {
-      return
-    }
-
-    input.focus({ preventScroll: true })
+    composerRef.current?.focus?.()
   }
 
   useEffect(() => {
@@ -120,16 +125,17 @@ function OrderChatPanel({
   }, [messages, isLoading])
 
   async function handleSend(event) {
-    event.preventDefault()
+    event?.preventDefault?.()
 
-    if (!canChat || !draft.trim() || isSending) {
+    if (!canChat || isEmptyChatHtml(draft) || isSending) {
       focusComposer()
       return
     }
 
-    const body = draft.trim()
+    const body = draft
     setIsSending(true)
     setDraft('')
+    composerRef.current?.clear?.()
     focusComposer()
 
     try {
@@ -147,6 +153,7 @@ function OrderChatPanel({
       })
     } catch (error) {
       setDraft(body)
+      composerRef.current?.setContent?.(body)
       appToast.danger(getErrorMessage(error, 'No se pudo enviar el mensaje.'))
     } finally {
       setIsSending(false)
@@ -195,6 +202,7 @@ function OrderChatPanel({
           <div className="flex flex-col gap-3">
             {messages.map((message) => {
               const isMine = message.userId === currentUser?.id
+              const isHtml = /<\/?[a-z][\s\S]*>/i.test(message.body)
 
               return (
                 <article
@@ -217,7 +225,13 @@ function OrderChatPanel({
                         {formatChatAuthorName(message.authorName)}
                       </p>
                     ) : null}
-                    <p className="whitespace-pre-wrap wrap-break-words">{message.body}</p>
+                    {isHtml ? (
+                      <MessageBody html={message.body} />
+                    ) : (
+                      <p className="whitespace-pre-wrap wrap-break-words">
+                        {message.body}
+                      </p>
+                    )}
                   </div>
                   <p className="px-1 text-[10px] text-foreground/45">
                     {formatMessageTime(message.createdAt)}
@@ -233,22 +247,13 @@ function OrderChatPanel({
         className="flex shrink-0 items-end gap-2 border-t border-border bg-surface p-3"
         onSubmit={handleSend}
       >
-        <textarea
-          ref={inputRef}
-          className="max-h-28 min-h-11 flex-1 resize-none rounded-2xl border border-border bg-background px-3 py-2.5 text-sm outline-none focus:border-primary focus:ring-4 focus:ring-primary/20 disabled:opacity-60"
+        <ChatComposer
+          ref={composerRef}
           value={draft}
-          placeholder={
-            canChat ? 'Escribe un mensaje...' : 'Chat no disponible'
-          }
           disabled={!canChat}
-          rows={1}
-          onChange={(event) => setDraft(event.target.value)}
-          onKeyDown={(event) => {
-            if (event.key === 'Enter' && !event.shiftKey) {
-              event.preventDefault()
-              handleSend(event)
-            }
-          }}
+          placeholder={canChat ? 'Escribe un mensaje...' : 'Chat no disponible'}
+          onChange={setDraft}
+          onSubmit={handleSend}
         />
         <AppButton
           type="submit"
@@ -257,7 +262,7 @@ function OrderChatPanel({
           icon={GrSend}
           aria-label="Enviar mensaje"
           tooltip="Enviar"
-          disabled={!canChat || isSending || !draft.trim()}
+          disabled={!canChat || isSending || isEmptyChatHtml(draft)}
           isLoading={isSending}
           onMouseDown={(event) => {
             event.preventDefault()
