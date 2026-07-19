@@ -1,4 +1,5 @@
 import { isSupabaseConfigured, supabase } from '../lib/supabaseClient'
+import { createEmptyParts } from '../shared/orderPdfConstants'
 
 export const INITIAL_ORDER_VALUES = {
   clientName: '',
@@ -15,10 +16,46 @@ export const INITIAL_ORDER_VALUES = {
   previousServiceNotes: '',
   documentNumber: '',
   externalOrderNumber: '',
+  deliveryDate: '',
+  repairDate: '',
+  purchaseDate: '',
+  symptom: '',
+  diagnosis: '',
+  parts: createEmptyParts(3),
 }
 
 const ORDER_SELECT =
-  'id, order_number, client_name, client_phone, device, brand, model, serial_number, service_type, service_condition, assigned_technician_id, issue, service_cost, previous_service_notes, document_number, external_order_number, status, created_by, created_at, updated_at'
+  'id, order_number, client_name, client_phone, device, brand, model, serial_number, service_type, service_condition, assigned_technician_id, issue, service_cost, previous_service_notes, document_number, external_order_number, delivery_date, repair_date, purchase_date, symptom, diagnosis, parts, status, created_by, created_at, updated_at'
+
+function normalizeParts(parts) {
+  const rows = Array.isArray(parts) ? parts : []
+  const normalized = rows.slice(0, 3).map((row) => ({
+    quantity: String(row?.quantity ?? '').trim(),
+    part: String(row?.part ?? '').trim(),
+    description: String(row?.description ?? '').trim(),
+    delivery: String(row?.delivery ?? '').trim(),
+  }))
+
+  while (normalized.length < 3) {
+    normalized.push({
+      quantity: '',
+      part: '',
+      description: '',
+      delivery: '',
+    })
+  }
+
+  return normalized
+}
+
+function toDateInputValue(value) {
+  if (!value) return ''
+  const raw = String(value)
+  if (/^\d{4}-\d{2}-\d{2}/.test(raw)) {
+    return raw.slice(0, 10)
+  }
+  return ''
+}
 
 export function formatOrderId(orderNumber) {
   return String(orderNumber).padStart(2, '0')
@@ -48,6 +85,12 @@ export function getOrderFormValues(order) {
     previousServiceNotes: order?.previousServiceNotes ?? '',
     documentNumber: order?.documentNumber ?? '',
     externalOrderNumber: order?.externalOrderNumber ?? '',
+    deliveryDate: toDateInputValue(order?.deliveryDate),
+    repairDate: toDateInputValue(order?.repairDate),
+    purchaseDate: toDateInputValue(order?.purchaseDate),
+    symptom: order?.symptom ?? '',
+    diagnosis: order?.diagnosis ?? '',
+    parts: normalizeParts(order?.parts),
   }
 }
 
@@ -82,11 +125,22 @@ function mapOrder(row) {
     previousServiceNotes: row.previous_service_notes ?? '',
     documentNumber: row.document_number ?? '',
     externalOrderNumber: row.external_order_number ?? '',
+    deliveryDate: row.delivery_date ?? null,
+    repairDate: row.repair_date ?? null,
+    purchaseDate: row.purchase_date ?? null,
+    symptom: row.symptom ?? '',
+    diagnosis: row.diagnosis ?? '',
+    parts: normalizeParts(row.parts),
     status: row.status ?? 'pending',
     createdBy: row.created_by ?? null,
     createdAt: row.created_at ?? null,
     updatedAt: row.updated_at ?? null,
   }
+}
+
+function toDbDate(value) {
+  const raw = String(value ?? '').trim()
+  return /^\d{4}-\d{2}-\d{2}$/.test(raw) ? raw : null
 }
 
 function toDbPayload(orderData) {
@@ -111,6 +165,12 @@ function toDbPayload(orderData) {
       condition === 'warranty' ? orderData.previousServiceNotes ?? '' : '',
     document_number: orderData.documentNumber ?? '',
     external_order_number: orderData.externalOrderNumber ?? '',
+    delivery_date: toDbDate(orderData.deliveryDate),
+    repair_date: toDbDate(orderData.repairDate),
+    purchase_date: toDbDate(orderData.purchaseDate),
+    symptom: orderData.symptom ?? '',
+    diagnosis: orderData.diagnosis ?? '',
+    parts: normalizeParts(orderData.parts),
   }
 }
 

@@ -1,12 +1,16 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from '@tanstack/react-router'
+import { FaFilePdf } from 'react-icons/fa6'
 import DashboardLayout from '../components/layout/DashboardLayout'
 import Loader from '../hooks/Loader'
 import appToast from '../hooks/appToast'
 import PageHeader from '../hooks/PageHeader'
 import AppSelect from './select'
+import AppButton from './AppButton'
 import ConfirmActions from './ConfirmActions'
 import OrderChatPanel from './OrderChatPanel'
+import OrderPdfPreviewDialog from './OrderPdfPreviewDialog'
+import { buildOrderPdfData } from './orderPdfConstants'
 import {
   SERVICE_CONDITION_OPTIONS,
   SERVICE_TYPE_OPTIONS,
@@ -67,43 +71,35 @@ function OrderFormView({ mode = 'create', orderId = null }) {
   const [technicianOptions, setTechnicianOptions] = useState([])
   const [isLoadingOrder, setIsLoadingOrder] = useState(mode === 'edit')
   const [isSubmitting, setIsSubmitting] = useState(false)
-  const [chatHeight, setChatHeight] = useState(null)
-  const formRef = useRef(null)
+  const [isPdfOpen, setIsPdfOpen] = useState(false)
   const config = modeConfig[mode] ?? modeConfig.create
   const isWarranty = form.serviceCondition === 'warranty'
   const isBilled = form.serviceCondition === 'billed'
 
-  useEffect(() => {
-    if (isLoadingOrder) {
-      return undefined
+  const technicianName = useMemo(() => {
+    if (!form.technicianId) {
+      return ''
     }
 
-    const formNode = formRef.current
+    return (
+      technicianOptions.find((option) => option.value === form.technicianId)
+        ?.label || ''
+    )
+  }, [form.technicianId, technicianOptions])
 
-    if (!formNode || typeof ResizeObserver === 'undefined') {
-      return undefined
-    }
-
-    function syncChatHeight() {
-      const nextHeight = Math.round(formNode.getBoundingClientRect().height)
-
-      if (nextHeight > 0) {
-        setChatHeight(nextHeight)
-      }
-    }
-
-    syncChatHeight()
-
-    const observer = new ResizeObserver(() => {
-      syncChatHeight()
-    })
-
-    observer.observe(formNode)
-
-    return () => {
-      observer.disconnect()
-    }
-  }, [isLoadingOrder, isWarranty, isBilled])
+  const pdfData = useMemo(
+    () =>
+      buildOrderPdfData({
+        form,
+        orderNumber: mode === 'edit' ? orderId : '',
+        technicianName,
+        generatedBy:
+          [user?.name, user?.lastName].filter(Boolean).join(' ').trim() ||
+          user?.nickname ||
+          '',
+      }),
+    [form, mode, orderId, technicianName, user],
+  )
 
   useEffect(() => {
     let cancelled = false
@@ -191,6 +187,20 @@ function OrderFormView({ mode = 'create', orderId = null }) {
     setForm((currentForm) => ({ ...currentForm, [name]: value }))
   }
 
+  function handlePartChange(index, field, value) {
+    setForm((currentForm) => {
+      const parts = [...(currentForm.parts || [])]
+      const currentRow = parts[index] || {
+        quantity: '',
+        part: '',
+        description: '',
+        delivery: '',
+      }
+      parts[index] = { ...currentRow, [field]: value }
+      return { ...currentForm, parts }
+    })
+  }
+
   function handleCancel() {
     navigate({ to: '/dashboard/orders' })
   }
@@ -231,6 +241,12 @@ function OrderFormView({ mode = 'create', orderId = null }) {
       previousServiceNotes: form.previousServiceNotes.trim(),
       documentNumber: form.documentNumber.trim(),
       externalOrderNumber: form.externalOrderNumber.trim(),
+      deliveryDate: form.deliveryDate,
+      repairDate: form.repairDate,
+      purchaseDate: form.purchaseDate,
+      symptom: form.symptom.trim(),
+      diagnosis: form.diagnosis.trim(),
+      parts: form.parts,
     }
 
     setIsSubmitting(true)
@@ -279,15 +295,34 @@ function OrderFormView({ mode = 'create', orderId = null }) {
               <p className="mt-1 text-sm text-foreground/55">{config.description}</p>
             </div>
 
-            <ConfirmActions
-              cancelLabel="Cancelar"
-              confirmLabel={config.confirmLabel}
-              isSubmitting={isSubmitting || isLoadingOrder}
-              onCancel={handleCancel}
-              onConfirm={handleSubmit}
-            />
+            <div className="flex flex-wrap items-center gap-3">
+              <AppButton
+                type="button"
+                variant="outline"
+                effect="zoomIn"
+                leftIcon={FaFilePdf}
+                disabled={isLoadingOrder}
+                onClick={() => setIsPdfOpen(true)}
+                className="border-border font-bold text-black dark:text-white hover:bg-red-500/10 hover:text-red-700"
+              >
+                Ver PDF
+              </AppButton>
+              <ConfirmActions
+                cancelLabel="Cancelar"
+                confirmLabel={config.confirmLabel}
+                isSubmitting={isSubmitting || isLoadingOrder}
+                onCancel={handleCancel}
+                onConfirm={handleSubmit}
+              />
+            </div>
           </div>
         </section>
+
+        <OrderPdfPreviewDialog
+          open={isPdfOpen}
+          onOpenChange={setIsPdfOpen}
+          data={pdfData}
+        />
 
         {isLoadingOrder ? (
           <div className="mt-6 flex justify-center rounded-4xl bg-surface px-5 py-10 shadow-sm ring-1 ring-border">
@@ -299,7 +334,6 @@ function OrderFormView({ mode = 'create', orderId = null }) {
         ) : (
           <div className="mt-6 grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(280px,380px)]">
             <form
-              ref={formRef}
               className="rounded-4xl bg-surface p-6 shadow-sm ring-1 ring-border"
               onSubmit={handleSubmit}
             >
@@ -440,6 +474,61 @@ function OrderFormView({ mode = 'create', orderId = null }) {
                   />
                 </label>
 
+                <label>
+                  <FieldLabel>Fecha de entrega</FieldLabel>
+                  <input
+                    className={FIELD_CLASS}
+                    name="deliveryDate"
+                    type="date"
+                    value={form.deliveryDate}
+                    onChange={handleChange}
+                  />
+                </label>
+
+                <label>
+                  <FieldLabel>Fecha de reparacion</FieldLabel>
+                  <input
+                    className={FIELD_CLASS}
+                    name="repairDate"
+                    type="date"
+                    value={form.repairDate}
+                    onChange={handleChange}
+                  />
+                </label>
+
+                <label>
+                  <FieldLabel>Fecha de compra</FieldLabel>
+                  <input
+                    className={FIELD_CLASS}
+                    name="purchaseDate"
+                    type="date"
+                    value={form.purchaseDate}
+                    onChange={handleChange}
+                  />
+                </label>
+
+                <label className="md:col-span-2">
+                  <FieldLabel>Sintoma</FieldLabel>
+                  <textarea
+                    className={`${FIELD_CLASS} min-h-24 resize-y`}
+                    name="symptom"
+                    value={form.symptom}
+                    placeholder="Descripcion del sintoma reportado"
+                    onChange={handleChange}
+                  />
+                </label>
+
+                <label className="md:col-span-2">
+                  <FieldLabel>Diagnostico</FieldLabel>
+                  <textarea
+                    className={`${FIELD_CLASS} min-h-24 resize-y`}
+                    name="diagnosis"
+                    value={form.diagnosis}
+                    placeholder="Diagnostico tecnico"
+                    onChange={handleChange}
+                  />
+                </label>
+
                 {isBilled ? (
                   <label>
                     <FieldLabel required>Costo del servicio</FieldLabel>
@@ -480,6 +569,55 @@ function OrderFormView({ mode = 'create', orderId = null }) {
                     onChange={handleChange}
                   />
                 </label>
+
+                <div className="md:col-span-2">
+                  <FieldLabel>Repuestos / Delivery</FieldLabel>
+                  <div className="mt-1 space-y-3 rounded-2xl border border-border p-3">
+                    {(form.parts || []).map((row, index) => (
+                      <div
+                        key={`part-row-${index}`}
+                        className="grid gap-2 md:grid-cols-4"
+                      >
+                        <input
+                          className={FIELD_CLASS}
+                          value={row.quantity}
+                          placeholder="Cantidad"
+                          onChange={(event) =>
+                            handlePartChange(index, 'quantity', event.target.value)
+                          }
+                        />
+                        <input
+                          className={FIELD_CLASS}
+                          value={row.part}
+                          placeholder="Parte / Repuesto"
+                          onChange={(event) =>
+                            handlePartChange(index, 'part', event.target.value)
+                          }
+                        />
+                        <input
+                          className={FIELD_CLASS}
+                          value={row.description}
+                          placeholder="Descripcion"
+                          onChange={(event) =>
+                            handlePartChange(
+                              index,
+                              'description',
+                              event.target.value,
+                            )
+                          }
+                        />
+                        <input
+                          className={FIELD_CLASS}
+                          value={row.delivery}
+                          placeholder="Delivery"
+                          onChange={(event) =>
+                            handlePartChange(index, 'delivery', event.target.value)
+                          }
+                        />
+                      </div>
+                    ))}
+                  </div>
+                </div>
               </div>
             </form>
 
@@ -487,12 +625,7 @@ function OrderFormView({ mode = 'create', orderId = null }) {
               orderUuid={orderUuid}
               orderLabel={mode === 'edit' ? orderId : ''}
               currentUser={user}
-              style={
-                chatHeight
-                  ? { '--order-chat-height': `${chatHeight}px` }
-                  : undefined
-              }
-              className="h-[min(70vh,36rem)] max-h-[min(70vh,36rem)] lg:h-[var(--order-chat-height,36rem)] lg:max-h-[var(--order-chat-height,36rem)]"
+              className="h-[min(70vh,36rem)] max-h-[min(70vh,36rem)]"
             />
           </div>
         )}
