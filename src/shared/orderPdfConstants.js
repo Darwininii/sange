@@ -13,10 +13,44 @@ export const EMPTY_PART_ROW = {
   part: '',
   description: '',
   delivery: '',
+  productId: '',
+  stock: null,
 }
 
-export function createEmptyParts(count = 3) {
+export const PDF_PARTS_MIN_ROWS = 3
+export const PDF_PARTS_MAX_ROWS = 12
+
+export function createEmptyParts(count = 1) {
   return Array.from({ length: count }, () => ({ ...EMPTY_PART_ROW }))
+}
+
+export function normalizePartRows(parts, { minRows = 0, maxRows = PDF_PARTS_MAX_ROWS } = {}) {
+  const rows = Array.isArray(parts) ? parts : []
+  const normalized = rows.slice(0, maxRows).map((row) => {
+    const stockValue = row?.stock
+    const stockNumber = Number(stockValue)
+
+    return {
+      quantity: String(row?.quantity ?? '').trim(),
+      part: String(row?.part ?? '').trim(),
+      description: String(row?.description ?? '').trim(),
+      delivery: String(row?.delivery ?? '').trim(),
+      productId: String(row?.productId ?? '').trim(),
+      stock:
+        stockValue === null ||
+        stockValue === undefined ||
+        stockValue === '' ||
+        !Number.isFinite(stockNumber)
+          ? null
+          : stockNumber,
+    }
+  })
+
+  while (normalized.length < minRows) {
+    normalized.push({ ...EMPTY_PART_ROW })
+  }
+
+  return normalized
 }
 
 export function formatPdfDate(value = new Date()) {
@@ -50,20 +84,16 @@ export function formatFormDateForPdf(value) {
   return formatPdfDate(raw)
 }
 
-function normalizeParts(parts) {
-  const rows = Array.isArray(parts) ? parts : []
-  const normalized = rows.slice(0, 3).map((row) => ({
-    quantity: String(row?.quantity ?? '').trim(),
-    part: String(row?.part ?? '').trim(),
-    description: String(row?.description ?? '').trim(),
-    delivery: String(row?.delivery ?? '').trim(),
+function normalizePartsForPdf(parts) {
+  return normalizePartRows(parts, {
+    minRows: PDF_PARTS_MIN_ROWS,
+    maxRows: PDF_PARTS_MAX_ROWS,
+  }).map((row) => ({
+    quantity: row.quantity,
+    part: row.part,
+    description: row.description,
+    delivery: row.delivery,
   }))
-
-  while (normalized.length < 3) {
-    normalized.push({ ...EMPTY_PART_ROW })
-  }
-
-  return normalized
 }
 
 export function buildOrderPdfData({
@@ -91,7 +121,7 @@ export function buildOrderPdfData({
     technicianName: technicianName?.trim() || '',
     symptom: form?.symptom?.trim() || '',
     diagnosis: form?.diagnosis?.trim() || '',
-    parts: normalizeParts(form?.parts),
+    parts: normalizePartsForPdf(form?.parts),
     generatedBy: generatedBy?.trim() || '',
     generatedAt: formatPdfDate(new Date()),
   }

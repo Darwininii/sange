@@ -250,3 +250,71 @@ with check (
 );
 
 grant select, insert on public.order_messages to authenticated;
+
+-- Inventory products (remote source of truth; images in storage bucket inventory-products)
+create table if not exists public.inventory_products (
+  id uuid primary key default gen_random_uuid(),
+  name text not null,
+  sku text not null default '',
+  description text not null default '',
+  quantity integer not null default 0 check (quantity >= 0),
+  unit_price numeric(12, 2) not null default 0 check (unit_price >= 0),
+  image_url text not null default '',
+  created_by uuid references auth.users(id) on delete set null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create index if not exists inventory_products_name_idx
+on public.inventory_products (name);
+
+create unique index if not exists inventory_products_sku_unique_idx
+on public.inventory_products (sku)
+where sku <> '';
+
+alter table public.inventory_products enable row level security;
+
+drop policy if exists "Active staff can read inventory products" on public.inventory_products;
+drop policy if exists "Active staff can create inventory products" on public.inventory_products;
+drop policy if exists "Active staff can update inventory products" on public.inventory_products;
+drop policy if exists "Active staff can delete inventory products" on public.inventory_products;
+
+create policy "Active staff can read inventory products"
+on public.inventory_products
+for select
+to authenticated
+using (public.is_active_staff());
+
+create policy "Active staff can create inventory products"
+on public.inventory_products
+for insert
+to authenticated
+with check (
+  public.is_active_staff()
+  and (created_by is null or created_by = auth.uid())
+);
+
+create policy "Active staff can update inventory products"
+on public.inventory_products
+for update
+to authenticated
+using (public.is_active_staff())
+with check (public.is_active_staff());
+
+create policy "Active staff can delete inventory products"
+on public.inventory_products
+for delete
+to authenticated
+using (public.is_active_staff());
+
+grant select, insert, update, delete on public.inventory_products to authenticated;
+
+-- Order slip fields used by PDF / inventory parts
+alter table public.orders
+  add column if not exists assigned_technician_id uuid references public.profiles(id) on delete set null,
+  add column if not exists delivery_date date,
+  add column if not exists repair_date date,
+  add column if not exists purchase_date date,
+  add column if not exists symptom text not null default '',
+  add column if not exists diagnosis text not null default '',
+  add column if not exists parts jsonb not null default '[]'::jsonb;

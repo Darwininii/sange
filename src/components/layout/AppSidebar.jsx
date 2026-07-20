@@ -7,7 +7,7 @@ import { PiPackageFill } from 'react-icons/pi'
 import { BiSolidDashboard } from 'react-icons/bi'
 import { HiUserCircle } from 'react-icons/hi2'
 import { HiOutlineLogout } from "react-icons/hi";
-import { TbArrowBigUpFilled } from "react-icons/tb";
+import { TbArrowBigUpFilled, TbUsersGroup } from 'react-icons/tb'
 import AppButton from '@/shared/AppButton'
 import AppSelect from '@/shared/select'
 import { cn } from '@/lib/utils'
@@ -40,7 +40,7 @@ const navigationItems = [
   },
   {
     label: 'Inventario',
-    href: '#inventario',
+    to: '/dashboard/inventory',
     icon: PiPackageFill,
   },
   {
@@ -55,6 +55,11 @@ const adminItems = [
     label: 'Perfiles',
     to: '/dashboard/perfiles',
     icon: FaUsersCog,
+  },
+  {
+    label: 'Clientes',
+    to: '/dashboard/clients',
+    icon: TbUsersGroup,
   },
   {
     label: 'Historial',

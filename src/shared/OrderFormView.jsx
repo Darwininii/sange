@@ -1,20 +1,37 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from '@tanstack/react-router'
 import { FaFilePdf } from 'react-icons/fa6'
+import { IoAddCircle } from 'react-icons/io5'
+import { TbTrashX } from 'react-icons/tb'
 import DashboardLayout from '../components/layout/DashboardLayout'
 import Loader from '../hooks/Loader'
 import appToast from '../hooks/appToast'
 import PageHeader from '../hooks/PageHeader'
+import { useCachedData } from '../hooks/useCachedData'
 import AppSelect from './select'
 import AppButton from './AppButton'
+import ClientLookupInput from './ClientLookupInput'
 import ConfirmActions from './ConfirmActions'
+import DatePicker from './DatePicker'
 import OrderChatPanel from './OrderChatPanel'
 import OrderPdfPreviewDialog from './OrderPdfPreviewDialog'
-import { buildOrderPdfData } from './orderPdfConstants'
+import ProductLookupInput from './ProductLookupInput'
+import {
+  applyClientToOrderForm,
+  CLIENT_SEARCH_KEYS,
+} from './clientOrderMap'
+import { buildOrderPdfData, PDF_PARTS_MAX_ROWS } from './orderPdfConstants'
 import {
   SERVICE_CONDITION_OPTIONS,
   SERVICE_TYPE_OPTIONS,
 } from './orderConstants'
+import {
+  applyProductToPartRow,
+  createEmptyPartRow,
+  getPartStockWarning,
+} from './productOrderMap'
+import { getClients } from '../services/clientService'
+import { getInventoryProducts } from '../services/inventoryService'
 import {
   INITIAL_ORDER_VALUES,
   createOrder,
@@ -75,6 +92,20 @@ function OrderFormView({ mode = 'create', orderId = null }) {
   const config = modeConfig[mode] ?? modeConfig.create
   const isWarranty = form.serviceCondition === 'warranty'
   const isBilled = form.serviceCondition === 'billed'
+
+  const { data: clientsData } = useCachedData({
+    cacheKey: 'clients',
+    fetcher: getClients,
+    enabled: Boolean(user?.id),
+  })
+  const clients = Array.isArray(clientsData) ? clientsData : []
+
+  const { data: productsData } = useCachedData({
+    cacheKey: 'inventory-products',
+    fetcher: getInventoryProducts,
+    enabled: Boolean(user?.id),
+  })
+  const products = Array.isArray(productsData) ? productsData : []
 
   const technicianName = useMemo(() => {
     if (!form.technicianId) {
@@ -187,16 +218,59 @@ function OrderFormView({ mode = 'create', orderId = null }) {
     setForm((currentForm) => ({ ...currentForm, [name]: value }))
   }
 
+  function handleSelectClient(client) {
+    setForm((currentForm) => applyClientToOrderForm(currentForm, client))
+  }
+
   function handlePartChange(index, field, value) {
     setForm((currentForm) => {
       const parts = [...(currentForm.parts || [])]
-      const currentRow = parts[index] || {
-        quantity: '',
-        part: '',
-        description: '',
-        delivery: '',
+      const currentRow = parts[index] || createEmptyPartRow()
+      const nextRow = { ...currentRow, [field]: value }
+
+      if (field === 'part' && !String(value ?? '').trim()) {
+        nextRow.productId = ''
+        nextRow.stock = null
       }
-      parts[index] = { ...currentRow, [field]: value }
+
+      parts[index] = nextRow
+      return { ...currentForm, parts }
+    })
+  }
+
+  function handleSelectPartProduct(index, product) {
+    setForm((currentForm) => {
+      const parts = [...(currentForm.parts || [])]
+      const currentRow = parts[index] || createEmptyPartRow()
+      parts[index] = applyProductToPartRow(currentRow, product)
+      return { ...currentForm, parts }
+    })
+  }
+
+  function handleAddPartRow() {
+    setForm((currentForm) => {
+      const parts = [...(currentForm.parts || [])]
+      if (parts.length >= PDF_PARTS_MAX_ROWS) {
+        appToast.warning(`Maximo ${PDF_PARTS_MAX_ROWS} repuestos por orden.`)
+        return currentForm
+      }
+
+      return {
+        ...currentForm,
+        parts: [...parts, createEmptyPartRow()],
+      }
+    })
+  }
+
+  function handleRemovePartRow(index) {
+    setForm((currentForm) => {
+      const parts = [...(currentForm.parts || [])]
+      if (parts.length <= 1) {
+        parts[0] = createEmptyPartRow()
+        return { ...currentForm, parts }
+      }
+
+      parts.splice(index, 1)
       return { ...currentForm, parts }
     })
   }
@@ -223,6 +297,17 @@ function OrderFormView({ mode = 'create', orderId = null }) {
 
     if (isBilled && String(form.serviceCost).trim() === '') {
       appToast.warning('El costo del servicio es obligatorio en ordenes facturadas.')
+      return
+    }
+
+    const stockBlock = (form.parts || []).find(
+      (row) => getPartStockWarning(row, products) === 'Supera el stock actual',
+    )
+
+    if (stockBlock) {
+      appToast.warning(
+        `Supera el stock actual en "${stockBlock.part || 'repuesto'}".`,
+      )
       return
     }
 
@@ -271,6 +356,7 @@ function OrderFormView({ mode = 'create', orderId = null }) {
 
       if (user?.id) {
         invalidateUserCache(user.id, 'orders')
+        invalidateUserCache(user.id, 'inventory-products')
       }
 
       navigate({ to: '/dashboard/orders' })
@@ -365,28 +451,33 @@ function OrderFormView({ mode = 'create', orderId = null }) {
                   />
                 </div>
 
-                <label>
-                  <FieldLabel required>Nombre del cliente</FieldLabel>
-                  <input
-                    className={FIELD_CLASS}
-                    name="clientName"
-                    value={form.clientName}
-                    placeholder="Nombre del cliente"
-                    onChange={handleChange}
-                    required
-                  />
-                </label>
+                <ClientLookupInput
+                  label="Nombre del cliente"
+                  required
+                  value={form.clientName}
+                  placeholder="Buscar por nombre..."
+                  clients={clients}
+                  searchKeys={CLIENT_SEARCH_KEYS}
+                  onValueChange={(clientName) =>
+                    setForm((currentForm) => ({ ...currentForm, clientName }))
+                  }
+                  onSelectClient={handleSelectClient}
+                />
 
-                <label>
-                  <FieldLabel>Numero de documento</FieldLabel>
-                  <input
-                    className={FIELD_CLASS}
-                    name="documentNumber"
-                    value={form.documentNumber}
-                    placeholder="Ej. 417"
-                    onChange={handleChange}
-                  />
-                </label>
+                <ClientLookupInput
+                  label="Cc. Cedula"
+                  value={form.documentNumber}
+                  placeholder="Buscar por cedula..."
+                  clients={clients}
+                  searchKeys={CLIENT_SEARCH_KEYS}
+                  onValueChange={(documentNumber) =>
+                    setForm((currentForm) => ({
+                      ...currentForm,
+                      documentNumber,
+                    }))
+                  }
+                  onSelectClient={handleSelectClient}
+                />
 
                 <label>
                   <FieldLabel>Telefono</FieldLabel>
@@ -474,38 +565,32 @@ function OrderFormView({ mode = 'create', orderId = null }) {
                   />
                 </label>
 
-                <label>
-                  <FieldLabel>Fecha de entrega</FieldLabel>
-                  <input
-                    className={FIELD_CLASS}
-                    name="deliveryDate"
-                    type="date"
-                    value={form.deliveryDate}
-                    onChange={handleChange}
-                  />
-                </label>
+                <DatePicker
+                  label="Fecha de entrega"
+                  value={form.deliveryDate}
+                  placeholder="Seleccionar fecha"
+                  onChange={(deliveryDate) =>
+                    setForm((currentForm) => ({ ...currentForm, deliveryDate }))
+                  }
+                />
 
-                <label>
-                  <FieldLabel>Fecha de reparacion</FieldLabel>
-                  <input
-                    className={FIELD_CLASS}
-                    name="repairDate"
-                    type="date"
-                    value={form.repairDate}
-                    onChange={handleChange}
-                  />
-                </label>
+                <DatePicker
+                  label="Fecha de reparacion"
+                  value={form.repairDate}
+                  placeholder="Seleccionar fecha"
+                  onChange={(repairDate) =>
+                    setForm((currentForm) => ({ ...currentForm, repairDate }))
+                  }
+                />
 
-                <label>
-                  <FieldLabel>Fecha de compra</FieldLabel>
-                  <input
-                    className={FIELD_CLASS}
-                    name="purchaseDate"
-                    type="date"
-                    value={form.purchaseDate}
-                    onChange={handleChange}
-                  />
-                </label>
+                <DatePicker
+                  label="Fecha de compra"
+                  value={form.purchaseDate}
+                  placeholder="Seleccionar fecha"
+                  onChange={(purchaseDate) =>
+                    setForm((currentForm) => ({ ...currentForm, purchaseDate }))
+                  }
+                />
 
                 <label className="md:col-span-2">
                   <FieldLabel>Sintoma</FieldLabel>
@@ -571,51 +656,98 @@ function OrderFormView({ mode = 'create', orderId = null }) {
                 </label>
 
                 <div className="md:col-span-2">
-                  <FieldLabel>Repuestos / Delivery</FieldLabel>
+                  <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
+                    <FieldLabel>Repuestos / Delivery</FieldLabel>
+                    <AppButton
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      leftIcon={IoAddCircle}
+                      className="rounded-xl px-3 py-1.5 text-xs font-semibold"
+                      onClick={handleAddPartRow}
+                    >
+                      Anadir repuesto
+                    </AppButton>
+                  </div>
                   <div className="mt-1 space-y-3 rounded-2xl border border-border p-3">
-                    {(form.parts || []).map((row, index) => (
-                      <div
-                        key={`part-row-${index}`}
-                        className="grid gap-2 md:grid-cols-4"
-                      >
-                        <input
-                          className={FIELD_CLASS}
-                          value={row.quantity}
-                          placeholder="Cantidad"
-                          onChange={(event) =>
-                            handlePartChange(index, 'quantity', event.target.value)
-                          }
-                        />
-                        <input
-                          className={FIELD_CLASS}
-                          value={row.part}
-                          placeholder="Parte / Repuesto"
-                          onChange={(event) =>
-                            handlePartChange(index, 'part', event.target.value)
-                          }
-                        />
-                        <input
-                          className={FIELD_CLASS}
-                          value={row.description}
-                          placeholder="Descripcion"
-                          onChange={(event) =>
-                            handlePartChange(
-                              index,
-                              'description',
-                              event.target.value,
-                            )
-                          }
-                        />
-                        <input
-                          className={FIELD_CLASS}
-                          value={row.delivery}
-                          placeholder="Delivery"
-                          onChange={(event) =>
-                            handlePartChange(index, 'delivery', event.target.value)
-                          }
-                        />
-                      </div>
-                    ))}
+                    {(form.parts || []).map((row, index) => {
+                      const stockWarning = getPartStockWarning(row, products)
+
+                      return (
+                        <div
+                          key={`part-row-${index}`}
+                          className="space-y-1.5 rounded-xl bg-background/60 p-2 ring-1 ring-border/60"
+                        >
+                          <div className="grid gap-2 md:grid-cols-[minmax(0,1.4fr)_minmax(0,0.7fr)_minmax(0,1.2fr)_minmax(0,0.8fr)_auto]">
+                            <ProductLookupInput
+                              value={row.part}
+                              placeholder="Parte / Producto"
+                              products={products}
+                              onValueChange={(value) =>
+                                handlePartChange(index, 'part', value)
+                              }
+                              onSelectProduct={(product) =>
+                                handleSelectPartProduct(index, product)
+                              }
+                            />
+                            <input
+                              className={FIELD_CLASS}
+                              value={row.quantity}
+                              placeholder="Cantidad"
+                              type="number"
+                              min="0"
+                              step="1"
+                              onChange={(event) =>
+                                handlePartChange(
+                                  index,
+                                  'quantity',
+                                  event.target.value,
+                                )
+                              }
+                            />
+                            <input
+                              className={FIELD_CLASS}
+                              value={row.description}
+                              placeholder="Descripcion"
+                              onChange={(event) =>
+                                handlePartChange(
+                                  index,
+                                  'description',
+                                  event.target.value,
+                                )
+                              }
+                            />
+                            <input
+                              className={FIELD_CLASS}
+                              value={row.delivery}
+                              placeholder="Delivery"
+                              onChange={(event) =>
+                                handlePartChange(
+                                  index,
+                                  'delivery',
+                                  event.target.value,
+                                )
+                              }
+                            />
+                            <AppButton
+                              type="button"
+                              size="icon"
+                              variant="outline"
+                              icon={TbTrashX}
+                              className="size-11 shrink-0 rounded-2xl text-red-500"
+                              tooltip="Quitar fila"
+                              aria-label="Quitar fila de repuesto"
+                              onClick={() => handleRemovePartRow(index)}
+                            />
+                          </div>
+                          {stockWarning ? (
+                            <p className="px-1 text-xs font-semibold text-amber-700 dark:text-amber-300">
+                              {stockWarning}
+                            </p>
+                          ) : null}
+                        </div>
+                      )
+                    })}
                   </div>
                 </div>
               </div>

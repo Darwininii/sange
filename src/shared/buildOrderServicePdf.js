@@ -145,14 +145,16 @@ function drawSectionBar(page, fonts, x, y, width, height, title) {
 
 function normalizeParts(parts) {
   const rows = Array.isArray(parts) ? parts : []
-  const normalized = rows.slice(0, 3).map((row) => ({
+  const maxRows = 12
+  const minRows = 3
+  const normalized = rows.slice(0, maxRows).map((row) => ({
     quantity: textOr(row?.quantity),
     part: textOr(row?.part),
     description: textOr(row?.description),
     delivery: textOr(row?.delivery),
   }))
 
-  while (normalized.length < 3) {
+  while (normalized.length < minRows) {
     normalized.push({ quantity: '', part: '', description: '', delivery: '' })
   }
 
@@ -347,15 +349,20 @@ function drawSlip(page, fonts, data, bounds, copyLabel) {
 
   // Parts table
   const partCols = [
+    { key: 'part', label: 'Parte/Producto', w: innerWidth * 0.28 },
     { key: 'quantity', label: 'Cantidad', w: innerWidth * 0.12 },
-    { key: 'part', label: 'Parte/Repuesto', w: innerWidth * 0.28 },
     { key: 'description', label: 'Descripción', w: innerWidth * 0.4 },
     { key: 'delivery', label: 'Delivery', w: 0 },
   ]
   partCols[3].w = innerWidth - partCols[0].w - partCols[1].w - partCols[2].w
 
+  const parts = normalizeParts(data.parts)
   const partHeadH = 13
-  const partRowH = 14
+  const availableForParts = Math.max(42, cursor - (bottom + 52))
+  const partRowH = Math.max(
+    10,
+    Math.min(14, Math.floor((availableForParts - partHeadH) / parts.length)),
+  )
   let xPos = innerLeft
   partCols.forEach((col) => {
     drawCell(page, fonts, {
@@ -371,7 +378,6 @@ function drawSlip(page, fonts, data, bounds, copyLabel) {
   })
   cursor -= partHeadH
 
-  const parts = normalizeParts(data.parts)
   parts.forEach((row) => {
     xPos = innerLeft
     partCols.forEach((col) => {

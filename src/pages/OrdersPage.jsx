@@ -147,7 +147,7 @@ function OrdersPage() {
         createLabel="Crear orden"
         onCreate={() => navigate({ to: '/dashboard/orders/new' })}
         actions={
-          <div className="relative min-w-[16rem] flex-1 sm:max-w-xs">
+          <div className="relative w-full min-w-[16rem] sm:w-72 sm:max-w-xs">
             <IoSearchCircleSharp className="pointer-events-none absolute left-3 top-1/2 size-6.5 -translate-y-1/2 text-foreground/45" />
             <input
               className="w-full rounded-2xl border border-border bg-background py-2.5 pl-10 pr-4 text-sm outline-none focus:border-primary focus:ring-4 focus:ring-primary/20"

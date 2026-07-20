@@ -5,7 +5,7 @@ export const dashboardByRole = {
     stats: [
       { label: 'Ordenes activas', value: '128', detail: '14 nuevas hoy' },
       { label: 'Ingresos del dia', value: '$4.2M', detail: 'Caja abierta' },
-      { label: 'Piezas en inventario', value: '842', detail: '32 con stock bajo' },
+      { label: 'Piezas en inventario', value: '—', detail: 'Ver modulo Inventario' },
     ],
     modules: [
       {

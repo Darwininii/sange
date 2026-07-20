@@ -1,5 +1,7 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from '@tanstack/react-router'
+import Fuse from 'fuse.js'
+import { IoSearchCircleSharp } from 'react-icons/io5'
 import DashboardLayout from '../components/layout/DashboardLayout'
 import Loader from '../hooks/Loader'
 import appToast from '../hooks/appToast'
@@ -114,6 +116,7 @@ function DashboardProfilesPage() {
   const navigate = useNavigate()
   const user = useAuthStore((state) => state.user)
   const logout = useAuthStore((state) => state.logout)
+  const [search, setSearch] = useState('')
   const [profileForm, setProfileForm] = useState(INITIAL_PROFILE_VALUES)
   const [passwordForm, setPasswordForm] = useState('')
   const [passwordProfile, setPasswordProfile] = useState(null)
@@ -139,6 +142,33 @@ function DashboardProfilesPage() {
   })
   const profiles = Array.isArray(profilesData) ? profilesData : []
 
+  const profileFuse = useMemo(
+    () =>
+      new Fuse(profiles, {
+        keys: [
+          'name',
+          'last_name',
+          'email',
+          'nickname',
+          'identification',
+          'phone',
+          'role',
+        ],
+        threshold: 0.35,
+        ignoreLocation: true,
+      }),
+    [profiles],
+  )
+
+  const filteredProfiles = useMemo(() => {
+    const query = search.trim()
+    if (!query) {
+      return profiles
+    }
+
+    return profileFuse.search(query).map((entry) => entry.item)
+  }, [profileFuse, profiles, search])
+
   const {
     page,
     setPage,
@@ -146,9 +176,16 @@ function DashboardProfilesPage() {
     setPageSize,
     totalPages,
     paginate,
-  } = usePagination({ totalItems: profiles.length, storageKey: 'profiles' })
+  } = usePagination({
+    totalItems: filteredProfiles.length,
+    storageKey: 'profiles',
+  })
 
-  const visibleProfiles = paginate(profiles)
+  const visibleProfiles = paginate(filteredProfiles)
+
+  useEffect(() => {
+    setPage(1)
+  }, [search, setPage])
 
   useEffect(() => {
     if (!error) {
@@ -455,6 +492,18 @@ function DashboardProfilesPage() {
         description="Las contraseñas no son visibles. Solo puedes reemplazarlas."
         createLabel="Crear perfil"
         onCreate={() => setIsCreateDialogOpen(true)}
+        actions={
+          <div className="relative w-full min-w-[16rem] sm:w-72 sm:max-w-xs">
+            <IoSearchCircleSharp className="pointer-events-none absolute left-3 top-1/2 size-6.5 -translate-y-1/2 text-foreground/45" />
+            <input
+              className="w-full rounded-2xl border border-border bg-background py-2.5 pl-10 pr-4 text-sm outline-none focus:border-primary focus:ring-4 focus:ring-primary/20"
+              value={search}
+              placeholder="Buscar perfil..."
+              onChange={(event) => setSearch(event.target.value)}
+              aria-label="Buscar perfiles"
+            />
+          </div>
+        }
         footer={
           <>
             <AppDialog
@@ -596,18 +645,32 @@ function DashboardProfilesPage() {
               className="text-foreground/55 [&>svg]:text-black/70 dark:[&>svg]:text-white/70"
             />
           </div>
+        ) : profiles.length === 0 ? (
+          <div className="rounded-3xl border border-dashed border-border bg-background px-5 py-10 text-center">
+            <p className="font-semibold text-foreground">
+              Aún no hay perfiles creados
+            </p>
+            <p className="mt-2 text-sm text-foreground/55">
+              Usa el boton "Crear perfil" para registrar el primero.
+            </p>
+          </div>
+        ) : filteredProfiles.length === 0 ? (
+          <div className="rounded-3xl border border-dashed border-border bg-background px-5 py-10 text-center">
+            <p className="font-semibold text-foreground">Sin resultados</p>
+            <p className="mt-2 text-sm text-foreground/55">
+              No hay perfiles que coincidan con la busqueda.
+            </p>
+          </div>
         ) : (
           <Table
             footer={
-              profiles.length > 0 ? (
-                <Pagination
-                  page={page}
-                  totalPages={totalPages}
-                  onPageChange={setPage}
-                  pageSize={pageSize}
-                  onPageSizeChange={setPageSize}
-                />
-              ) : null
+              <Pagination
+                page={page}
+                totalPages={totalPages}
+                onPageChange={setPage}
+                pageSize={pageSize}
+                onPageSizeChange={setPageSize}
+              />
             }
           >
             <TableHeader>

@@ -1,0 +1,158 @@
+Now you can import the <FilePond> Component and add it to your .jsx files.
+
+// Import React FilePond
+import { FilePond, registerPlugin } from 'react-filepond';
+
+// Import FilePond styles
+import 'filepond/dist/filepond.min.css';
+We can configure our pond by using the FilePond instance properties as props on the <FilePond> Component.
+
+<FilePond allowMultiple={true} maxFiles={3} server="/api" />
+We can use the callback properties to listen for events on the pond component.
+
+<FilePond oninit={() => this.handleInit()} />
+By setting a ref we can call FilePond instance methods on the Component.
+
+{
+    /* set pond reference like this */
+}
+<FilePond ref={(ref) => (this.pond = ref)} />;
+
+{
+    /* call methods like this */
+}
+this.pond.getFiles();
+By setting the files prop we can programmatically update the current files list. For more information see Setting initial files.
+
+We can use the onupdatefiles callback to sync the FilePond files with our own state.
+
+<FilePond onupdatefiles={fileItems => {
+    setState({
+        files: fileItems.map(fileItem => fileItem.file)
+    })
+}}>
+If you're using TypeScript you can import needed types from the filepond package.
+
+import { FilePondFile, FilePondInitialFile } from 'filepond';
+React Component implementation
+// Import React
+import React, { Component } from 'react';
+import ReactDOM from 'react-dom';
+
+// Import React FilePond
+import { FilePond, registerPlugin } from 'react-filepond';
+
+// Import FilePond styles
+import 'filepond/dist/filepond.min.css';
+
+// Import the Image EXIF Orientation and Image Preview plugins
+// Note: These need to be installed separately
+import FilePondPluginImageExifOrientation from 'filepond-plugin-image-exif-orientation';
+import FilePondPluginImagePreview from 'filepond-plugin-image-preview';
+import 'filepond-plugin-image-preview/dist/filepond-plugin-image-preview.css';
+
+// Register the plugins
+registerPlugin(FilePondPluginImageExifOrientation, FilePondPluginImagePreview);
+
+// Our app
+class App extends Component {
+    constructor(props) {
+        super(props);
+
+        this.state = {
+            // Set initial files, type 'local' means this is a file
+            // that has already been uploaded to the server (see docs)
+            files: [
+                {
+                    source: 'index.html',
+                    options: {
+                        type: 'local',
+                    },
+                },
+            ],
+        };
+    }
+
+    handleInit() {
+        console.log('FilePond instance has initialised', this.pond);
+    }
+
+    render() {
+        return (
+            <div className="App">
+                {/* Pass FilePond properties as attributes */}
+                <FilePond
+                    ref={(ref) => (this.pond = ref)}
+                    files={this.state.files}
+                    allowMultiple={true}
+                    maxFiles={3}
+                    server="/api"
+                    oninit={() => this.handleInit()}
+                    onupdatefiles={(fileItems) => {
+                        // Set current file objects to this.state
+                        this.setState({
+                            files: fileItems.map((fileItem) => fileItem.file),
+                        });
+                    }}
+                ></FilePond>
+            </div>
+        );
+    }
+}
+
+// Attach App to DOM
+const root = ReactDOM.createRoot(document.getElementById('root'));
+root.render(
+    <React.StrictMode>
+        <App />
+    </React.StrictMode>
+);
+
+Run in Sandbox
+
+Copy to Clipboard
+React Hooks implementation
+import React, { useState } from 'react';
+import ReactDOM from 'react-dom';
+
+// Import React FilePond
+import { FilePond, registerPlugin } from 'react-filepond';
+
+// Import FilePond styles
+import 'filepond/dist/filepond.min.css';
+
+// Import the Image EXIF Orientation and Image Preview plugins
+// Note: These need to be installed separately
+// `npm i filepond-plugin-image-preview filepond-plugin-image-exif-orientation --save`
+import FilePondPluginImageExifOrientation from 'filepond-plugin-image-exif-orientation';
+import FilePondPluginImagePreview from 'filepond-plugin-image-preview';
+import 'filepond-plugin-image-preview/dist/filepond-plugin-image-preview.css';
+
+// Register the plugins
+registerPlugin(FilePondPluginImageExifOrientation, FilePondPluginImagePreview);
+
+// Our app
+function App() {
+    const [files, setFiles] = useState([]);
+    return (
+        <div className="App">
+            <FilePond
+                files={files}
+                onupdatefiles={setFiles}
+                allowMultiple={true}
+                maxFiles={3}
+                server="/api"
+                name="files"
+                labelIdle='Drag & Drop your files or <span class="filepond--label-action">Browse</span>'
+            />
+        </div>
+    );
+}
+
+// Attach App to DOM
+const root = ReactDOM.createRoot(document.getElementById('root'));
+root.render(
+    <React.StrictMode>
+        <App />
+    </React.StrictMode>
+);

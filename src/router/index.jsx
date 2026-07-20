@@ -5,7 +5,9 @@ import {
   redirect,
 } from '@tanstack/react-router'
 import App from '../App'
+import DashboardClientsPage from '../pages/DashboardClientsPage'
 import DashboardHistoryPage from '../pages/DashboardHistoryPage'
+import DashboardInventoryPage from '../pages/DashboardInventoryPage'
 import DashboardMyProfilePage from '../pages/DashboardMyProfilePage'
 import DashboardPage from '../pages/DashboardPage'
 import DashboardProfilesPage from '../pages/DashboardProfilesPage'
@@ -101,6 +103,24 @@ const dashboardProfilesRoute = createRoute({
   component: DashboardProfilesPage,
 })
 
+const dashboardClientsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/dashboard/clients',
+  beforeLoad: async () => {
+    await requireDashboardUser({ adminOnly: true })
+  },
+  component: DashboardClientsPage,
+})
+
+const dashboardInventoryRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/dashboard/inventory',
+  beforeLoad: async () => {
+    await requireDashboardUser()
+  },
+  component: DashboardInventoryPage,
+})
+
 const dashboardOrdersRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/dashboard/orders',
@@ -134,6 +154,8 @@ const routeTree = rootRoute.addChildren([
   dashboardMyProfileRoute,
   dashboardHistoryRoute,
   dashboardProfilesRoute,
+  dashboardClientsRoute,
+  dashboardInventoryRoute,
   dashboardOrdersRoute,
   dashboardNewOrderRoute,
   dashboardEditOrderRoute,

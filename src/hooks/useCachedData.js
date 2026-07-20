@@ -107,6 +107,8 @@ export function useCachedData({
       setData(currentCache)
       setIsLoading(false)
       setError(null)
+      // Keep UI snappy with cache, then refresh from Supabase in background.
+      loadData({ silent: true, force: true }).catch(() => {})
       return
     }
 

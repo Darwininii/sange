@@ -284,3 +284,152 @@ a {
   text-decoration: underline;
 }
 
+/* Cally date picker (order form dates) — compact */
+.sange-date-picker {
+  font-size: 0.75rem;
+}
+
+.sange-date-picker calendar-date {
+  display: block;
+  inline-size: 100%;
+  color: var(--foreground);
+}
+
+.sange-date-picker calendar-date::part(container) {
+  inline-size: 100%;
+}
+
+/* Custom AppButton header replaces Cally's built-in nav */
+.sange-date-picker calendar-date::part(header) {
+  display: none;
+}
+
+.sange-date-picker calendar-date::part(months) {
+  display: block;
+  inline-size: 100%;
+}
+
+.sange-date-picker calendar-month {
+  display: block;
+  inline-size: 100%;
+  --color-accent: var(--primary);
+  --color-text-on-accent: var(--primary-foreground);
+}
+
+/* Month label is custom (clickable); hide Cally's built-in month heading */
+.sange-date-picker calendar-month::part(heading) {
+  display: none;
+}
+
+.sange-date-picker calendar-month::part(table) {
+  inline-size: 100%;
+  table-layout: fixed;
+  border-spacing: 0.15rem;
+  border-collapse: separate;
+}
+
+/* Match Cally day-grid columns so labels stay centered over numbers */
+.sange-date-picker-weekdays {
+  inline-size: 100%;
+  table-layout: fixed;
+  border-collapse: separate;
+  border-spacing: 0.15rem;
+}
+
+.sange-date-picker-weekdays th {
+  padding: 0;
+  font-size: 0.65rem;
+  font-weight: 700;
+  text-align: center;
+  color: var(--foreground);
+}
+
+.sange-date-picker-weekdays th span {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-inline-size: 1.65rem;
+  min-block-size: 1.25rem;
+}
+
+/* Custom weekday row in DatePicker; hide Cally's narrow headers */
+.sange-date-picker calendar-month::part(head) {
+  display: none;
+}
+
+.sange-date-picker calendar-month::part(button) {
+  border: none;
+  border-radius: 0.4rem;
+  color: color-mix(in srgb, var(--foreground) 75%, transparent);
+  cursor: pointer;
+  font-size: 0.7rem;
+  inline-size: 100%;
+  min-inline-size: 1.65rem;
+  min-block-size: 1.65rem;
+  padding: 0;
+  background: transparent;
+  transition:
+    background-color 120ms ease,
+    color 120ms ease;
+}
+
+.sange-date-picker calendar-month::part(button):hover {
+  background: color-mix(in srgb, var(--primary) 22%, transparent);
+  color: var(--foreground);
+}
+
+.sange-date-picker calendar-month::part(day) {
+  font-size: 0.7rem;
+}
+
+.sange-date-picker calendar-month::part(selected),
+.sange-date-picker calendar-month::part(today) {
+  border-radius: 0.4rem;
+}
+
+.sange-date-picker calendar-month::part(selected) {
+  background: var(--primary);
+  color: var(--primary-foreground);
+}
+
+.sange-date-picker calendar-month::part(selected):hover {
+  background: color-mix(in srgb, var(--primary) 85%, var(--foreground));
+  color: var(--primary-foreground);
+}
+
+.sange-date-picker calendar-month::part(today):not([part~='selected']) {
+  background: color-mix(in srgb, var(--foreground) 10%, transparent);
+}
+
+.sange-date-picker calendar-month::part(today):not([part~='selected']):hover {
+  background: color-mix(in srgb, var(--primary) 22%, transparent);
+}
+
+.sange-filepond .filepond--root {
+  margin-bottom: 0;
+  font-family: inherit;
+}
+
+.sange-filepond .filepond--panel-root {
+  background-color: var(--color-background, var(--background));
+  border-radius: 1rem;
+}
+
+.sange-filepond .filepond--drop-label {
+  color: color-mix(in srgb, var(--foreground) 70%, transparent);
+  min-height: 7.5rem;
+}
+
+.sange-filepond .filepond--label-action {
+  color: var(--primary);
+  text-decoration-color: color-mix(in srgb, var(--primary) 45%, transparent);
+}
+
+.sange-filepond .filepond--item-panel {
+  background-color: color-mix(in srgb, var(--foreground) 12%, transparent);
+}
+
+.sange-filepond .filepond--drip-blob {
+  background-color: var(--primary);
+}
+

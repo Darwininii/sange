@@ -1,5 +1,8 @@
 import { isSupabaseConfigured, supabase } from '../lib/supabaseClient'
-import { createEmptyParts } from '../shared/orderPdfConstants'
+import {
+  createEmptyParts,
+  normalizePartRows,
+} from '../shared/orderPdfConstants'
 
 export const INITIAL_ORDER_VALUES = {
   clientName: '',
@@ -21,31 +24,15 @@ export const INITIAL_ORDER_VALUES = {
   purchaseDate: '',
   symptom: '',
   diagnosis: '',
-  parts: createEmptyParts(3),
+  parts: createEmptyParts(1),
 }
 
 const ORDER_SELECT =
   'id, order_number, client_name, client_phone, device, brand, model, serial_number, service_type, service_condition, assigned_technician_id, issue, service_cost, previous_service_notes, document_number, external_order_number, delivery_date, repair_date, purchase_date, symptom, diagnosis, parts, status, created_by, created_at, updated_at'
 
 function normalizeParts(parts) {
-  const rows = Array.isArray(parts) ? parts : []
-  const normalized = rows.slice(0, 3).map((row) => ({
-    quantity: String(row?.quantity ?? '').trim(),
-    part: String(row?.part ?? '').trim(),
-    description: String(row?.description ?? '').trim(),
-    delivery: String(row?.delivery ?? '').trim(),
-  }))
-
-  while (normalized.length < 3) {
-    normalized.push({
-      quantity: '',
-      part: '',
-      description: '',
-      delivery: '',
-    })
-  }
-
-  return normalized
+  const normalized = normalizePartRows(parts, { minRows: 1 })
+  return normalized.length > 0 ? normalized : createEmptyParts(1)
 }
 
 function toDateInputValue(value) {
@@ -210,6 +197,19 @@ export async function getOrderByNumber(orderId) {
   return mapOrder(data)
 }
 
+function mapOrderWriteError(error, fallback) {
+  const message = String(error?.message ?? '')
+
+  if (
+    message.includes('Stock insuficiente') ||
+    message.includes('Producto de inventario no encontrado')
+  ) {
+    return new Error(message)
+  }
+
+  return new Error(`${fallback}: ${message || 'Error desconocido.'}`)
+}
+
 export async function createOrder(orderData, { createdBy } = {}) {
   const client = requireSupabase()
 
@@ -224,7 +224,7 @@ export async function createOrder(orderData, { createdBy } = {}) {
     .single()
 
   if (error) {
-    throw new Error(`No se pudo crear la orden: ${error.message}`)
+    throw mapOrderWriteError(error, 'No se pudo crear la orden')
   }
 
   return mapOrder(data)
@@ -246,7 +246,7 @@ export async function updateOrder(orderId, orderData) {
     .maybeSingle()
 
   if (error) {
-    throw new Error(`No se pudo actualizar la orden: ${error.message}`)
+    throw mapOrderWriteError(error, 'No se pudo actualizar la orden')
   }
 
   if (!data) {
