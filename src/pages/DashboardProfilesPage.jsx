@@ -396,13 +396,18 @@ function DashboardProfilesPage() {
     setIsSubmitting(true)
 
     try {
-      await appToast.promise(changeProfilePassword(passwordProfile.id, passwordForm), {
-        loading: 'Actualizando contraseña...',
-        success: (result) =>
-          `Contraseña actualizada correctamente. ${buildEmailStatusMessage(result.email)}`,
-        error: (profileError) =>
-          getErrorMessage(profileError, 'No se pudo cambiar la contraseña.'),
-      })
+      await appToast.promise(
+        changeProfilePassword(passwordProfile.id, passwordForm, {
+          profileName: formatProfileName(passwordProfile),
+        }),
+        {
+          loading: 'Actualizando contraseña...',
+          success: (result) =>
+            `Contraseña actualizada correctamente. ${buildEmailStatusMessage(result.email)}`,
+          error: (profileError) =>
+            getErrorMessage(profileError, 'No se pudo cambiar la contraseña.'),
+        },
+      )
       setPasswordForm('')
       setPasswordProfile(null)
       await refreshProfiles()
@@ -424,12 +429,17 @@ function DashboardProfilesPage() {
     setIsSubmitting(true)
 
     try {
-      await appToast.promise(revokeProfileAccess(revokeProfile.id), {
-        loading: 'Revocando permisos...',
-        success: 'Permisos revocados correctamente.',
-        error: (profileError) =>
-          getErrorMessage(profileError, 'No se pudieron revocar los permisos.'),
-      })
+      await appToast.promise(
+        revokeProfileAccess(revokeProfile.id, {
+          profileName: formatProfileName(revokeProfile),
+        }),
+        {
+          loading: 'Revocando permisos...',
+          success: 'Permisos revocados correctamente.',
+          error: (profileError) =>
+            getErrorMessage(profileError, 'No se pudieron revocar los permisos.'),
+        },
+      )
       setRevokeProfile(null)
       await refreshProfiles()
     } finally {
@@ -445,12 +455,17 @@ function DashboardProfilesPage() {
     setIsSubmitting(true)
 
     try {
-      await appToast.promise(reactivateProfileAccess(reactivateProfile.id), {
-        loading: 'Activando permisos...',
-        success: 'Permisos activados correctamente.',
-        error: (profileError) =>
-          getErrorMessage(profileError, 'No se pudieron activar los permisos.'),
-      })
+      await appToast.promise(
+        reactivateProfileAccess(reactivateProfile.id, {
+          profileName: formatProfileName(reactivateProfile),
+        }),
+        {
+          loading: 'Activando permisos...',
+          success: 'Permisos activados correctamente.',
+          error: (profileError) =>
+            getErrorMessage(profileError, 'No se pudieron activar los permisos.'),
+        },
+      )
       setReactivateProfile(null)
       await refreshProfiles()
     } finally {
@@ -471,12 +486,17 @@ function DashboardProfilesPage() {
     setIsSubmitting(true)
 
     try {
-      await appToast.promise(deleteRevokedProfile(deleteProfile.id), {
-        loading: 'Eliminando perfil...',
-        success: 'Perfil revocado eliminado correctamente.',
-        error: (profileError) =>
-          getErrorMessage(profileError, 'No se pudo eliminar el perfil.'),
-      })
+      await appToast.promise(
+        deleteRevokedProfile(deleteProfile.id, {
+          profileName: formatProfileName(deleteProfile),
+        }),
+        {
+          loading: 'Eliminando perfil...',
+          success: 'Perfil revocado eliminado correctamente.',
+          error: (profileError) =>
+            getErrorMessage(profileError, 'No se pudo eliminar el perfil.'),
+        },
+      )
       setDeleteProfile(null)
       await refreshProfiles()
     } finally {

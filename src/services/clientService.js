@@ -1,4 +1,8 @@
 import { isSupabaseConfigured, supabase } from '../lib/supabaseClient'
+import {
+  activityActions,
+  registerActivitySafe,
+} from './activityService'
 
 export const INITIAL_CLIENT_VALUES = {
   name: '',
@@ -91,7 +95,19 @@ export async function createClient(clientData, { createdBy } = {}) {
     throw new Error(`No se pudo crear el cliente: ${error.message}`)
   }
 
-  return mapClient(data)
+  const created = mapClient(data)
+
+  await registerActivitySafe({
+    userId: createdBy,
+    action: activityActions.client_create,
+    metadata: {
+      clientId: created.id,
+      name: created.name,
+      documentNumber: created.documentNumber,
+    },
+  })
+
+  return created
 }
 
 export async function updateClient(clientId, clientData) {
@@ -126,7 +142,18 @@ export async function updateClient(clientId, clientData) {
     throw new Error('No se encontro el cliente para actualizar.')
   }
 
-  return mapClient(data)
+  const updated = mapClient(data)
+
+  await registerActivitySafe({
+    action: activityActions.client_update,
+    metadata: {
+      clientId: updated.id,
+      name: updated.name,
+      documentNumber: updated.documentNumber,
+    },
+  })
+
+  return updated
 }
 
 export async function deleteClient(clientId) {
@@ -136,11 +163,26 @@ export async function deleteClient(clientId) {
     throw new Error('Cliente invalido.')
   }
 
+  const { data: existing } = await client
+    .from('clients')
+    .select('id, name, document_number')
+    .eq('id', clientId)
+    .maybeSingle()
+
   const { error } = await client.from('clients').delete().eq('id', clientId)
 
   if (error) {
     throw new Error(`No se pudo eliminar el cliente: ${error.message}`)
   }
+
+  await registerActivitySafe({
+    action: activityActions.client_delete,
+    metadata: {
+      clientId,
+      name: existing?.name ?? '',
+      documentNumber: existing?.document_number ?? '',
+    },
+  })
 
   return true
 }

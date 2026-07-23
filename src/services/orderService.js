@@ -3,6 +3,10 @@ import {
   createEmptyParts,
   normalizePartRows,
 } from '../shared/orderPdfConstants'
+import {
+  activityActions,
+  registerActivitySafe,
+} from './activityService'
 
 export const INITIAL_ORDER_VALUES = {
   clientName: '',
@@ -227,7 +231,19 @@ export async function createOrder(orderData, { createdBy } = {}) {
     throw mapOrderWriteError(error, 'No se pudo crear la orden')
   }
 
-  return mapOrder(data)
+  const created = mapOrder(data)
+
+  await registerActivitySafe({
+    userId: createdBy,
+    action: activityActions.order_create,
+    metadata: {
+      orderId: created.id,
+      orderNumber: created.orderNumber,
+      clientName: created.clientName,
+    },
+  })
+
+  return created
 }
 
 export async function updateOrder(orderId, orderData) {
@@ -253,7 +269,18 @@ export async function updateOrder(orderId, orderData) {
     throw new Error('No se encontro la orden para actualizar.')
   }
 
-  return mapOrder(data)
+  const updated = mapOrder(data)
+
+  await registerActivitySafe({
+    action: activityActions.order_update,
+    metadata: {
+      orderId: updated.id,
+      orderNumber: updated.orderNumber,
+      clientName: updated.clientName,
+    },
+  })
+
+  return updated
 }
 
 export async function getTechnicians() {

@@ -1,4 +1,8 @@
 import { isSupabaseConfigured, supabase } from '../lib/supabaseClient'
+import {
+  activityActions,
+  registerActivitySafe,
+} from './activityService'
 
 export const INITIAL_PRODUCT_VALUES = {
   name: '',
@@ -221,7 +225,19 @@ export async function createInventoryProduct(productData, { createdBy } = {}) {
     throw new Error(`No se pudo crear el producto: ${error.message}`)
   }
 
-  return mapProduct(data)
+  const created = mapProduct(data)
+
+  await registerActivitySafe({
+    userId: createdBy,
+    action: activityActions.inventory_create,
+    metadata: {
+      productId: created.id,
+      productName: created.name,
+      sku: created.sku,
+    },
+  })
+
+  return created
 }
 
 export async function updateInventoryProduct(productId, productData) {
@@ -256,7 +272,18 @@ export async function updateInventoryProduct(productId, productData) {
     throw new Error('No se encontro el producto para actualizar.')
   }
 
-  return mapProduct(data)
+  const updated = mapProduct(data)
+
+  await registerActivitySafe({
+    action: activityActions.inventory_update,
+    metadata: {
+      productId: updated.id,
+      productName: updated.name,
+      sku: updated.sku,
+    },
+  })
+
+  return updated
 }
 
 export async function deleteInventoryProduct(productId) {
@@ -266,6 +293,12 @@ export async function deleteInventoryProduct(productId) {
     throw new Error('Producto invalido.')
   }
 
+  const { data: existing } = await client
+    .from('inventory_products')
+    .select('id, name, sku')
+    .eq('id', productId)
+    .maybeSingle()
+
   const { error } = await client
     .from('inventory_products')
     .delete()
@@ -274,6 +307,15 @@ export async function deleteInventoryProduct(productId) {
   if (error) {
     throw new Error(`No se pudo eliminar el producto: ${error.message}`)
   }
+
+  await registerActivitySafe({
+    action: activityActions.inventory_delete,
+    metadata: {
+      productId,
+      productName: existing?.name ?? '',
+      sku: existing?.sku ?? '',
+    },
+  })
 
   return true
 }

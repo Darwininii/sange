@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
+import { clearSessionActivityFlag } from '../services/activityService'
 import { clearDataCache } from './dataCacheStore'
 
 export const useAuthStore = create(
@@ -14,6 +15,7 @@ export const useAuthStore = create(
       logout: () => {
         const userId = get().user?.id
         clearDataCache()
+        clearSessionActivityFlag(userId)
         if (userId && typeof window !== 'undefined') {
           try {
             window.sessionStorage.removeItem(`sange:temp-password-notice:${userId}`)

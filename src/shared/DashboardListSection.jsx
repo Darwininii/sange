@@ -10,6 +10,7 @@ function DashboardListSection({
   description,
   createLabel,
   onCreate,
+  showCreate = Boolean(createLabel && onCreate),
   actions = null,
   children,
   footer = null,
@@ -28,13 +29,15 @@ function DashboardListSection({
           </div>
           <div className="flex w-full flex-col gap-3 sm:flex-row sm:items-center sm:justify-end lg:w-auto">
             {actions}
-            <AppButton
-              effect="zoomIn"
-              className={`${CREATE_BUTTON_CLASS} shrink-0`}
-              onClick={onCreate}
-            >
-              {createLabel}
-            </AppButton>
+            {showCreate ? (
+              <AppButton
+                effect="zoomIn"
+                className={`${CREATE_BUTTON_CLASS} shrink-0`}
+                onClick={onCreate}
+              >
+                {createLabel}
+              </AppButton>
+            ) : null}
           </div>
         </div>
 

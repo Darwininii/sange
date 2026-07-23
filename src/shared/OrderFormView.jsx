@@ -29,6 +29,7 @@ import {
   applyProductToPartRow,
   createEmptyPartRow,
   getPartStockWarning,
+  sanitizePartsAgainstProducts,
 } from './productOrderMap'
 import { getClients } from '../services/clientService'
 import { getInventoryProducts } from '../services/inventoryService'
@@ -300,7 +301,9 @@ function OrderFormView({ mode = 'create', orderId = null }) {
       return
     }
 
-    const stockBlock = (form.parts || []).find(
+    const sanitizedParts = sanitizePartsAgainstProducts(form.parts, products)
+
+    const stockBlock = sanitizedParts.find(
       (row) => getPartStockWarning(row, products) === 'Supera el stock actual',
     )
 
@@ -331,7 +334,7 @@ function OrderFormView({ mode = 'create', orderId = null }) {
       purchaseDate: form.purchaseDate,
       symptom: form.symptom.trim(),
       diagnosis: form.diagnosis.trim(),
-      parts: form.parts,
+      parts: sanitizedParts,
     }
 
     setIsSubmitting(true)
