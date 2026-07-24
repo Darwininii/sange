@@ -3,6 +3,7 @@ import { Link } from '@tanstack/react-router'
 import Loader from '@/hooks/Loader'
 import { cn } from '@/lib/utils'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+import CustomBadge from '@/shared/CustomBadge'
 
 const baseStyles =
   'group relative inline-flex shrink-0 cursor-pointer items-center justify-center gap-2 whitespace-nowrap rounded-2xl font-semibold transition outline-none focus-visible:ring-4 focus-visible:ring-primary/25 disabled:cursor-not-allowed disabled:opacity-60 aria-disabled:cursor-not-allowed aria-disabled:opacity-60'
@@ -71,6 +72,8 @@ const AppButton = forwardRef(function AppButton(
     tooltipSide = 'top',
     tooltipShowArrow = true,
     tooltipClassName,
+    badgeCount,
+    badgeClassName,
     to,
     href,
     type = 'button',
@@ -150,6 +153,14 @@ const AppButton = forwardRef(function AppButton(
           )}
         </>
       )}
+      <CustomBadge
+        count={badgeCount}
+        className={cn(
+          'absolute top-0.5 right-0.5 z-20 size-5 min-w-5 text-[9px]',
+          'group-data-[collapsible=icon]:top-0 group-data-[collapsible=icon]:right-0',
+          badgeClassName,
+        )}
+      />
       {effect === 'shine' && (
         <span
           aria-hidden="true"

@@ -17,6 +17,7 @@ export const activityActions = {
   inventory_delete: 'inventory_delete',
   order_create: 'order_create',
   order_update: 'order_update',
+  order_message: 'order_message',
 }
 
 const SESSION_ACTIVITY_KEY_PREFIX = 'sange:activity-session:'
@@ -301,6 +302,12 @@ export function getActivityMessage(activity) {
       return `${userName} creo una orden${targetSuffix}`
     case activityActions.order_update:
       return `${userName} edito una orden${targetSuffix}`
+    case activityActions.order_message: {
+      const orderRef = metadata.orderNumber
+        ? ` #${metadata.orderNumber}`
+        : targetSuffix
+      return `${userName} envio un mensaje en la orden${orderRef}`
+    }
     default:
       return `${userName} realizo una actividad`
   }

@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import { clearSessionActivityFlag } from '../services/activityService'
 import { clearDataCache } from './dataCacheStore'
+import { useNotificationStore } from './notificationStore'
 
 export const useAuthStore = create(
   persist(
@@ -16,6 +17,12 @@ export const useAuthStore = create(
         const userId = get().user?.id
         clearDataCache()
         clearSessionActivityFlag(userId)
+        useNotificationStore.setState({
+          items: [],
+          unreadTotal: 0,
+          unreadByCategory: { orders: 0, inventory: 0 },
+          error: null,
+        })
         if (userId && typeof window !== 'undefined') {
           try {
             window.sessionStorage.removeItem(`sange:temp-password-notice:${userId}`)

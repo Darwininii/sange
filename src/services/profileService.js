@@ -16,12 +16,29 @@ function profileActivityName(profile) {
 }
 
 async function callAdminProfilesFunction(action, payload = {}) {
-  if (!isSupabaseConfigured) {
+  if (!isSupabaseConfigured || !supabase) {
     throw new Error('Supabase no esta configurado.')
+  }
+
+  const {
+    data: { session },
+    error: sessionError,
+  } = await supabase.auth.getSession()
+
+  if (sessionError) {
+    throw new Error(sessionError.message)
+  }
+
+  // loginWithNickname no requiere sesion; el resto si.
+  if (action !== 'loginWithNickname' && !session?.access_token) {
+    throw new Error('Tu sesion expiro. Vuelve a iniciar sesion.')
   }
 
   const { data, error } = await supabase.functions.invoke('admin-profiles', {
     body: { action, payload },
+    headers: session?.access_token
+      ? { Authorization: `Bearer ${session.access_token}` }
+      : undefined,
   })
 
   if (error) {

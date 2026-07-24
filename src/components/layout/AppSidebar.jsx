@@ -13,6 +13,7 @@ import AppSelect from '@/shared/select'
 import TitleName from '@/shared/TitleName'
 import { cn } from '@/lib/utils'
 import { useThemeStore } from '@/store/themeStore'
+import { useNotificationStore } from '@/store/notificationStore'
 import {
   Sidebar,
   SidebarContent,
@@ -108,7 +109,7 @@ function getUserInitial(user) {
   return getDisplayName(user).charAt(0).toUpperCase() || 'U'
 }
 
-function NavItem({ item, isActive, isCollapsed }) {
+function NavItem({ item, isActive, isCollapsed, badgeCount = 0 }) {
   const Icon = item.icon
 
   return (
@@ -123,6 +124,7 @@ function NavItem({ item, isActive, isCollapsed }) {
           href={item.href}
           variant="ghost"
           leftIcon={Icon}
+          badgeCount={badgeCount}
           tooltip={isCollapsed ? item.label : undefined}
           tooltipSide="right"
           iconClassName={cn(
@@ -159,6 +161,13 @@ function AppSidebar({ user, onLogout }) {
   const isAdmin = user.role === 'admin'
   const displayName = getDisplayName(user)
   const userMenuOptions = getUserMenuOptions(theme)
+  const unreadByCategory = useNotificationStore((store) => store.unreadByCategory)
+
+  const navBadgeByPath = {
+    '/dashboard/orders': unreadByCategory.orders,
+    '/dashboard/inventory': unreadByCategory.inventory,
+    '/dashboard/perfiles': unreadByCategory.profiles,
+  }
 
   return (
     <Sidebar
@@ -196,6 +205,7 @@ function AppSidebar({ user, onLogout }) {
                     (item.to !== '/dashboard' && pathname.startsWith(`${item.to}/`))
                   }
                   isCollapsed={isCollapsed}
+                  badgeCount={navBadgeByPath[item.to] ?? 0}
                 />
               ))}
             </SidebarMenu>
@@ -215,6 +225,7 @@ function AppSidebar({ user, onLogout }) {
                     item={item}
                     isActive={item.to === pathname}
                     isCollapsed={isCollapsed}
+                    badgeCount={navBadgeByPath[item.to] ?? 0}
                   />
                 ))}
               </SidebarMenu>

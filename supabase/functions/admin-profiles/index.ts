@@ -479,6 +479,150 @@ function buildPasswordChangedEmailText({
   ].join('\n')
 }
 
+function createAdminClient(supabaseUrl: string, serviceRoleKey: string) {
+  return createClient(supabaseUrl, serviceRoleKey, {
+    auth: {
+      persistSession: false,
+      autoRefreshToken: false,
+      detectSessionInUrl: false,
+    },
+    global: {
+      headers: {
+        Authorization: `Bearer ${serviceRoleKey}`,
+        apikey: serviceRoleKey,
+      },
+    },
+  })
+}
+
+function extractBearerToken(authorization: string | null) {
+  if (!authorization) {
+    return null
+  }
+
+  const match = authorization.match(/^Bearer\s+(.+)$/i)
+  return match?.[1]?.trim() || null
+}
+
+function authAdminHeaders(serviceRoleKey: string) {
+  return {
+    Authorization: `Bearer ${serviceRoleKey}`,
+    apikey: serviceRoleKey,
+    'Content-Type': 'application/json',
+  }
+}
+
+async function readAuthErrorMessage(response: Response) {
+  try {
+    const payload = await response.json()
+    return (
+      payload?.msg ||
+      payload?.error_description ||
+      payload?.message ||
+      payload?.error ||
+      `Auth admin error (${response.status})`
+    )
+  } catch {
+    return `Auth admin error (${response.status})`
+  }
+}
+
+async function getCallerUser(
+  supabaseUrl: string,
+  anonKey: string,
+  accessToken: string,
+) {
+  const response = await fetch(`${supabaseUrl}/auth/v1/user`, {
+    method: 'GET',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      apikey: anonKey,
+    },
+  })
+
+  if (!response.ok) {
+    return { user: null, error: new Error(await readAuthErrorMessage(response)) }
+  }
+
+  const user = await response.json()
+  return { user, error: null }
+}
+
+async function adminUpdateUserById(
+  supabaseUrl: string,
+  serviceRoleKey: string,
+  userId: string,
+  attributes: Record<string, unknown>,
+) {
+  const response = await fetch(`${supabaseUrl}/auth/v1/admin/users/${userId}`, {
+    method: 'PUT',
+    headers: authAdminHeaders(serviceRoleKey),
+    body: JSON.stringify(attributes),
+  })
+
+  if (!response.ok) {
+    throw new Error(await readAuthErrorMessage(response))
+  }
+
+  return await response.json()
+}
+
+async function adminCreateUser(
+  supabaseUrl: string,
+  serviceRoleKey: string,
+  attributes: Record<string, unknown>,
+) {
+  const response = await fetch(`${supabaseUrl}/auth/v1/admin/users`, {
+    method: 'POST',
+    headers: authAdminHeaders(serviceRoleKey),
+    body: JSON.stringify(attributes),
+  })
+
+  if (!response.ok) {
+    throw new Error(await readAuthErrorMessage(response))
+  }
+
+  return await response.json()
+}
+
+async function adminListUsers(
+  supabaseUrl: string,
+  serviceRoleKey: string,
+  { page = 1, perPage = 1000 } = {},
+) {
+  const url = new URL(`${supabaseUrl}/auth/v1/admin/users`)
+  url.searchParams.set('page', String(page))
+  url.searchParams.set('per_page', String(perPage))
+
+  const response = await fetch(url, {
+    method: 'GET',
+    headers: authAdminHeaders(serviceRoleKey),
+  })
+
+  if (!response.ok) {
+    throw new Error(await readAuthErrorMessage(response))
+  }
+
+  return await response.json()
+}
+
+async function adminDeleteUser(
+  supabaseUrl: string,
+  serviceRoleKey: string,
+  userId: string,
+) {
+  const response = await fetch(`${supabaseUrl}/auth/v1/admin/users/${userId}`, {
+    method: 'DELETE',
+    headers: authAdminHeaders(serviceRoleKey),
+  })
+
+  if (!response.ok) {
+    throw new Error(await readAuthErrorMessage(response))
+  }
+
+  return true
+}
+
 Deno.serve(async (request) => {
   if (request.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
@@ -488,7 +632,7 @@ Deno.serve(async (request) => {
     const supabaseUrl = getEnv('SUPABASE_URL')
     const anonKey = getEnv('SUPABASE_ANON_KEY')
     const serviceRoleKey = getEnv('SUPABASE_SERVICE_ROLE_KEY')
-    const adminClient = createClient(supabaseUrl, serviceRoleKey)
+    const adminClient = createAdminClient(supabaseUrl, serviceRoleKey)
     const { action, payload = {} } = await request.json()
 
     if (action === 'loginWithNickname') {
@@ -514,7 +658,13 @@ Deno.serve(async (request) => {
         return jsonResponse({ error: 'Credencial o contraseña incorrectos.' }, 401)
       }
 
-      const loginClient = createClient(supabaseUrl, anonKey)
+      const loginClient = createClient(supabaseUrl, anonKey, {
+        auth: {
+          persistSession: false,
+          autoRefreshToken: false,
+          detectSessionInUrl: false,
+        },
+      })
       const { data: authData, error: authError } =
         await loginClient.auth.signInWithPassword({
           email: profile.email,
@@ -531,24 +681,38 @@ Deno.serve(async (request) => {
       })
     }
 
-    const authorization = request.headers.get('Authorization')
+    const accessToken = extractBearerToken(request.headers.get('Authorization'))
 
-    if (!authorization) {
+    if (!accessToken) {
       return jsonResponse({ error: 'No autorizado.' }, 401)
     }
 
-    const userClient = createClient(supabaseUrl, anonKey, {
-      global: { headers: { Authorization: authorization } },
-    })
-
-    const {
-      data: { user: caller },
-      error: callerError,
-    } = await userClient.auth.getUser()
+    // Validate the caller with an explicit JWT via Auth HTTP API.
+    // Avoid attaching the user token to a shared supabase-js client.
+    const { user: caller, error: callerError } = await getCallerUser(
+      supabaseUrl,
+      anonKey,
+      accessToken,
+    )
 
     if (callerError || !caller) {
       return jsonResponse({ error: 'No autorizado.' }, 401)
     }
+
+    // Client scoped to the caller JWT so SECURITY DEFINER RPCs see auth.uid()/is_admin().
+    const userDbClient = createClient(supabaseUrl, anonKey, {
+      auth: {
+        persistSession: false,
+        autoRefreshToken: false,
+        detectSessionInUrl: false,
+      },
+      global: {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          apikey: anonKey,
+        },
+      },
+    })
 
     const { data: callerProfile } = await adminClient
       .from('profiles')
@@ -598,10 +762,13 @@ Deno.serve(async (request) => {
         return jsonResponse({ error: 'La nueva contraseña es requerida.' }, 400)
       }
 
-      const { error: passwordError } =
-        await adminClient.auth.admin.updateUserById(caller.id, {
-          password,
-        })
+      const { error: passwordError } = await userDbClient.rpc(
+        'admin_auth_set_password',
+        {
+          target_user_id: caller.id,
+          new_password: password,
+        },
+      )
 
       if (passwordError) {
         throw passwordError
@@ -650,18 +817,14 @@ Deno.serve(async (request) => {
         throw error
       }
 
-      const { data: authUsersData, error: authUsersError } =
-        await adminClient.auth.admin.listUsers({
-          page: 1,
-          perPage: 1000,
-        })
+      const authUsersData = { users: [] as Array<{ id: string; email?: string }> }
 
-      if (authUsersError) {
-        throw authUsersError
-      }
-
+      const authUsers = authUsersData?.users ?? []
       const authEmailById = new Map(
-        authUsersData.users.map((authUser) => [authUser.id, authUser.email]),
+        authUsers.map((authUser: { id: string; email?: string }) => [
+          authUser.id,
+          authUser.email,
+        ]),
       )
 
       const profiles = data ?? []
@@ -717,20 +880,30 @@ Deno.serve(async (request) => {
         nickname: normalizedNickname,
       })
 
-      const { data: authData, error: createError } =
-        await adminClient.auth.admin.createUser({
-          email,
-          password,
-          email_confirm: true,
-          user_metadata: { name, last_name, nickname: normalizedNickname, role },
-        })
+      const { data: createdUserId, error: createError } = await userDbClient.rpc(
+        'admin_auth_create_user',
+        {
+          new_email: email,
+          new_password: password,
+          new_user_meta: {
+            name,
+            last_name,
+            nickname: normalizedNickname,
+            role,
+          },
+        },
+      )
 
       if (createError) {
         throw createError
       }
 
+      if (!createdUserId) {
+        throw new Error('No se pudo crear el usuario de autenticacion.')
+      }
+
       const { error: profileError } = await adminClient.from('profiles').upsert({
-        id: authData.user.id,
+        id: createdUserId,
         name,
         last_name,
         nickname: normalizedNickname,
@@ -770,7 +943,7 @@ Deno.serve(async (request) => {
       })
 
       return jsonResponse(
-        { profileId: authData.user.id, email: emailResult },
+        { profileId: createdUserId, email: emailResult },
         201,
       )
     }
@@ -796,13 +969,16 @@ Deno.serve(async (request) => {
         )
       }
 
-      const { error: passwordError } =
-        await adminClient.auth.admin.updateUserById(profileId, {
-          password,
-        })
+      const { error: passwordError } = await userDbClient.rpc(
+        'admin_auth_set_password',
+        {
+          target_user_id: profileId,
+          new_password: password,
+        },
+      )
 
       if (passwordError) {
-        throw passwordError
+        throw new Error(passwordError.message)
       }
 
       const { error: updateProfileError } = await adminClient
@@ -814,7 +990,7 @@ Deno.serve(async (request) => {
         .eq('id', profileId)
 
       if (updateProfileError) {
-        throw updateProfileError
+        throw new Error(updateProfileError.message)
       }
 
       const emailResult = await sendEmail({
@@ -889,18 +1065,25 @@ Deno.serve(async (request) => {
         .eq('id', profileId)
 
       if (updateProfileError) {
-        throw updateProfileError
+        throw new Error(updateProfileError.message)
       }
 
-      const { error: updateUserError } =
-        await adminClient.auth.admin.updateUserById(profileId, {
-          email,
-          email_confirm: true,
-          user_metadata: { name, last_name, nickname: normalizedNickname, role },
-        })
+      const { error: updateUserError } = await userDbClient.rpc(
+        'admin_auth_update_user',
+        {
+          target_user_id: profileId,
+          new_email: email,
+          new_user_meta: {
+            name,
+            last_name,
+            nickname: normalizedNickname,
+            role,
+          },
+        },
+      )
 
       if (updateUserError) {
-        throw updateUserError
+        throw new Error(updateUserError.message)
       }
 
       return jsonResponse({ updated: true })
@@ -935,9 +1118,18 @@ Deno.serve(async (request) => {
         throw updateError
       }
 
-      await adminClient.auth.admin.updateUserById(profileId, {
-        ban_duration: '876000h',
+      const bannedUntil = new Date(
+        Date.now() + 876000 * 60 * 60 * 1000,
+      ).toISOString()
+
+      const { error: banError } = await userDbClient.rpc('admin_auth_set_ban', {
+        target_user_id: profileId,
+        banned_until: bannedUntil,
       })
+
+      if (banError) {
+        throw banError
+      }
 
       return jsonResponse({ revoked: true })
     }
@@ -971,10 +1163,13 @@ Deno.serve(async (request) => {
         throw updateError
       }
 
-      const { error: reactivateUserError } =
-        await adminClient.auth.admin.updateUserById(profileId, {
-          ban_duration: 'none',
-        })
+      const { error: reactivateUserError } = await userDbClient.rpc(
+        'admin_auth_set_ban',
+        {
+          target_user_id: profileId,
+          banned_until: null,
+        },
+      )
 
       if (reactivateUserError) {
         throw reactivateUserError
@@ -1010,8 +1205,12 @@ Deno.serve(async (request) => {
         )
       }
 
-      const { error: deleteError } =
-        await adminClient.auth.admin.deleteUser(profileId)
+      const { error: deleteError } = await userDbClient.rpc(
+        'admin_auth_delete_user',
+        {
+          target_user_id: profileId,
+        },
+      )
 
       if (deleteError) {
         throw deleteError
@@ -1022,9 +1221,18 @@ Deno.serve(async (request) => {
 
     return jsonResponse({ error: 'Accion no soportada.' }, 400)
   } catch (error) {
-    return jsonResponse(
-      { error: error instanceof Error ? error.message : 'Error inesperado.' },
-      400,
-    )
+    const message =
+      error instanceof Error
+        ? error.message
+        : typeof error === 'object' &&
+            error &&
+            'message' in error &&
+            typeof (error as { message?: unknown }).message === 'string'
+          ? (error as { message: string }).message
+          : 'Error inesperado.'
+
+    console.error('admin-profiles error:', error)
+
+    return jsonResponse({ error: message }, 400)
   }
 })

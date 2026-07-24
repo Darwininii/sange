@@ -40,6 +40,8 @@ function MessageBody({ html, className }) {
 function OrderChatPanel({
   orderUuid = null,
   orderLabel = '',
+  clientName = '',
+  technicianId = '',
   currentUser = null,
   className,
   style,
@@ -142,6 +144,9 @@ function OrderChatPanel({
       const message = await sendOrderMessage(orderUuid, body, {
         userId: currentUser.id,
         authorName: getChatAuthorName(currentUser),
+        orderNumber: orderLabel,
+        clientName,
+        technicianId,
       })
 
       setMessages((current) => {

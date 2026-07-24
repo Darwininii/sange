@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react'
+import { useCallback, useRef, useState } from 'react'
 
 export const DEFAULT_PAGE_SIZE = 15
 
@@ -52,29 +52,62 @@ export function usePagination({
   const [pageSize, setPageSizeState] = useState(() =>
     readStoredSize(fullKey, defaultPageSize),
   )
-  const [page, setPage] = useState(1)
+  const [page, setPageState] = useState(1)
 
   const totalPages = Math.max(1, Math.ceil(totalItems / pageSize))
   const currentPage = Math.min(Math.max(page, 1), totalPages)
+
+  const pageRef = useRef(page)
+  const pageSizeRef = useRef(pageSize)
+  const totalPagesRef = useRef(totalPages)
+  const totalItemsRef = useRef(totalItems)
+
+  pageRef.current = page
+  pageSizeRef.current = pageSize
+  totalPagesRef.current = totalPages
+  totalItemsRef.current = totalItems
 
   const setPageSize = useCallback(
     (next) => {
       const resolved = next === 'default' ? defaultPageSize : Number(next)
       const safe =
         Number.isFinite(resolved) && resolved > 0 ? resolved : defaultPageSize
+
+      const prevSize = pageSizeRef.current
+      const prevTotalPages = Math.max(
+        1,
+        Math.ceil(totalItemsRef.current / prevSize),
+      )
+      const effectivePage = Math.min(
+        Math.max(pageRef.current, 1),
+        prevTotalPages,
+      )
+      const firstItemIndex = (effectivePage - 1) * prevSize
+      const newTotalPages = Math.max(
+        1,
+        Math.ceil(totalItemsRef.current / safe),
+      )
+      const equivalentPage = Math.min(
+        Math.max(Math.floor(firstItemIndex / safe) + 1, 1),
+        newTotalPages,
+      )
+
       setPageSizeState(safe)
-      setPage(1)
+      setPageState(equivalentPage)
       writeStoredSize(fullKey, safe)
     },
     [defaultPageSize, fullKey],
   )
 
-  const goToPage = useCallback(
-    (next) => {
-      setPage(() => Math.min(Math.max(Number(next) || 1, 1), totalPages))
-    },
-    [totalPages],
-  )
+  // Stable identity: pages use this in useEffect deps; must not change with totalPages.
+  const goToPage = useCallback((next) => {
+    setPageState(() =>
+      Math.min(
+        Math.max(Number(next) || 1, 1),
+        totalPagesRef.current,
+      ),
+    )
+  }, [])
 
   const startIndex = (currentPage - 1) * pageSize
   const endIndex = startIndex + pageSize

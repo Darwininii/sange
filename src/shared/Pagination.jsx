@@ -1,12 +1,8 @@
-import {
-  MdKeyboardArrowLeft,
-  MdKeyboardArrowRight,
-  MdKeyboardDoubleArrowLeft,
-  MdKeyboardDoubleArrowRight,
-} from 'react-icons/md'
-import { TbPoint } from 'react-icons/tb'
+import { ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from 'lucide-react'
+import { GoDotFill } from 'react-icons/go'
 import { cn } from '@/lib/utils'
 import { PAGE_SIZE_OPTIONS } from '@/hooks/usePagination'
+import { Separator } from '@/components/ui/separator'
 import AppButton from './AppButton'
 import AppSelect from './select'
 
@@ -42,19 +38,24 @@ function getPaginationRange(currentPage, totalPages, siblingCount = 1) {
   return [1, DOTS, ...range(leftSibling, rightSibling), DOTS, totalPages]
 }
 
-function ArrowButton({ icon, label, onClick, disabled }) {
+function ArrowButton({ icon: Icon, label, onClick, disabled }) {
   return (
     <AppButton
-      variant="outline"
-      effect="zoomIn"
-      icon={icon}
+      variant="ghost"
+      size="icon"
+      effect="magnetic"
+      icon={Icon}
       iconClassName="size-5"
       onClick={onClick}
       disabled={disabled}
       aria-label={label}
       tooltip={label}
-      className="size-9 rounded-xl border-black/30 dark:border-white/50 dark:hover:border-amber-400 dark:bg-transparent/10 dark:hover:bg-black/70 bg-white p-0 text-black dark:text-white hover:border-black/70 hover:bg-amber-700/50 
-      hover:text-[#1a2340]"
+      className={cn(
+        'size-10 rounded-2xl text-foreground/70 transition-all duration-300',
+        'hover:bg-background/80 hover:text-foreground hover:shadow-md',
+        'dark:hover:bg-white/10',
+        disabled && 'opacity-30',
+      )}
     />
   )
 }
@@ -62,16 +63,18 @@ function ArrowButton({ icon, label, onClick, disabled }) {
 function PageButton({ page, isActive, onClick }) {
   return (
     <AppButton
-      variant={isActive ? 'solid' : 'outline'}
-      effect="zoomIn"
+      variant="ghost"
+      size="sm"
+      effect={isActive ? 'shine' : 'magnetic'}
+      shineColor="rgba(255, 255, 255, 0.25)"
       onClick={onClick}
       aria-label={`Ir a la pagina ${page}`}
       aria-current={isActive ? 'page' : undefined}
       className={cn(
-        'size-9 min-w-9 rounded-xl p-0 text-sm font-semibold',
+        'size-10 min-w-10 rounded-xl p-0 text-sm font-bold transition-all duration-300',
         isActive
-          ? 'bg-amber-500/80 hover:bg-amber-500/60 text-black dark:bg-amber-500/80 dark:text-black dark:hover:text-white font-black shadow-md shadow-primary/20 dark:hover:bg-black/50 ring-2 dark:ring-white/80 ring-black/60'
-          : 'hover:text-black/60 ring-1 ring-black/30 dark:bg-surface dark:text-foreground/70 dark:hover:ring-primary/40 dark:hover:bg-primary/10 dark:hover:text-primary',
+          ? 'z-10 scale-110 bg-foreground text-background shadow-lg shadow-black/20 ring-0 dark:bg-white/85 dark:text-black dark:shadow-white/10'
+          : 'text-foreground/65 hover:bg-background/70 hover:text-foreground dark:hover:bg-white/10',
       )}
     >
       {page}
@@ -103,68 +106,101 @@ function Pagination({
   return (
     <div
       className={cn(
-        'flex flex-wrap items-center justify-between gap-4',
+        'flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between',
         className,
       )}
     >
-      {showPageSize && (
+      {showPageSize ? (
         <div className="flex items-center gap-2">
-          <span className="text-sm font-medium text-foreground/55">Cantidad:</span>
+          <span className="text-xs font-semibold uppercase tracking-wider text-foreground/55">
+            Cantidad
+          </span>
           <AppSelect
             value={String(pageSize)}
             onValueChange={onPageSizeChange}
             options={pageSizeOptions}
-            className="h-9 w-24 rounded-xl px-3 py-0 text-sm"
+            className="h-10 w-24 rounded-xl px-3 py-0 text-sm"
           />
         </div>
+      ) : (
+        <span />
       )}
 
-      <nav aria-label="Paginacion" className="flex items-center gap-1">
-        <ArrowButton
-          icon={MdKeyboardDoubleArrowLeft}
-          label="Primera pagina"
-          disabled={isFirst}
-          onClick={() => goTo(1)}
-        />
-        <ArrowButton
-          icon={MdKeyboardArrowLeft}
-          label="Pagina anterior"
-          disabled={isFirst}
-          onClick={() => goTo(page - 1)}
-        />
+      <div className="flex flex-col items-center gap-3 sm:items-end">
+        <nav
+          aria-label="Paginacion"
+          className={cn(
+            'relative z-10 flex items-center gap-1 rounded-3xl p-1.5',
+            'border border-border/80 bg-background/40 shadow-lg shadow-black/5',
+            'ring-1 ring-black/5 backdrop-blur-xl',
+            'dark:border-white/10 dark:bg-black/30 dark:shadow-black/20 dark:ring-white/5',
+          )}
+        >
+          <ArrowButton
+            icon={ChevronsLeft}
+            label="Primera pagina"
+            disabled={isFirst}
+            onClick={() => goTo(1)}
+          />
+          <ArrowButton
+            icon={ChevronLeft}
+            label="Pagina anterior"
+            disabled={isFirst}
+            onClick={() => goTo(page - 1)}
+          />
 
-        {pages.map((item, index) =>
-          item === DOTS ? (
-            <span
-              key={`dots-${index}`}
-              aria-hidden="true"
-              className="flex size-9 items-center justify-center text-foreground/40"
-            >
-              <TbPoint className="size-4" />
-            </span>
-          ) : (
-            <PageButton
-              key={item}
-              page={item}
-              isActive={item === page}
-              onClick={() => goTo(item)}
-            />
-          ),
-        )}
+          <Separator
+            orientation="vertical"
+            className="mx-1 h-6 bg-foreground/20 dark:bg-white/40"
+          />
 
-        <ArrowButton
-          icon={MdKeyboardArrowRight}
-          label="Pagina siguiente"
-          disabled={isLast}
-          onClick={() => goTo(page + 1)}
-        />
-        <ArrowButton
-          icon={MdKeyboardDoubleArrowRight}
-          label="Ultima pagina"
-          disabled={isLast}
-          onClick={() => goTo(safeTotal)}
-        />
-      </nav>
+          <div className="flex items-center gap-1">
+            {pages.map((item, index) =>
+              item === DOTS ? (
+                <span
+                  key={`dots-${index}`}
+                  aria-hidden="true"
+                  className="flex size-10 items-center justify-center text-foreground/45"
+                >
+                  <GoDotFill className="size-3" />
+                </span>
+              ) : (
+                <PageButton
+                  key={item}
+                  page={item}
+                  isActive={item === page}
+                  onClick={() => goTo(item)}
+                />
+              ),
+            )}
+          </div>
+
+          <Separator
+            orientation="vertical"
+            className="mx-1 h-6 bg-foreground/20 dark:bg-white/40"
+          />
+
+          <ArrowButton
+            icon={ChevronRight}
+            label="Pagina siguiente"
+            disabled={isLast}
+            onClick={() => goTo(page + 1)}
+          />
+          <ArrowButton
+            icon={ChevronsRight}
+            label="Ultima pagina"
+            disabled={isLast}
+            onClick={() => goTo(safeTotal)}
+          />
+        </nav>
+
+        <p className="text-xs font-semibold uppercase tracking-wider text-foreground/55">
+          Pagina{' '}
+          <span className="font-bold text-foreground">{page}</span>
+          {' '}de{' '}
+          <span className="font-bold text-foreground">{safeTotal}</span>
+        </p>
+      </div>
     </div>
   )
 }

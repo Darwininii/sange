@@ -60,7 +60,7 @@ function TemporaryPasswordNotice({ user }) {
       }}
     >
       <div className="mt-5 grid gap-5">
-        <div className="rounded-3xl bg-amber-500/10 px-5 py-4 text-sm leading-6 text-amber-100">
+        <div className="rounded-3xl bg-amber-500/10 px-5 py-4 text-sm leading-6 text-black">
           <p className="font-bold">
             Debes cambiar tu contraseña para mayor seguridad.
           </p>

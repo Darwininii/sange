@@ -12,6 +12,7 @@ import {
   useSidebar,
 } from '@/components/animate-ui/components/radix/sidebar'
 import { trackSessionAccess } from '@/services/activityService'
+import { useNotificationStore } from '@/store/notificationStore'
 
 function SidebarDockToggle() {
   const { state, isMobile, toggleSidebar } = useSidebar()
@@ -34,7 +35,7 @@ function SidebarDockToggle() {
         !isCollapsed && 'rotate-180',
       )}
       className={cn(
-        'fixed bottom-6 z-40 size-10 rounded-full ring-2 ring-[#1a2340]/60 dark:ring-primary/60 bg-transparent shadow-lg shadow-black/15',
+        'fixed bottom-6 z-40 size-10 rounded-full bg-transparent shadow-lg shadow-black/15',
         'transition-[left] duration-300 ease-out',
         isCollapsed
           ? 'left-[calc(var(--sidebar-width-icon)+0.75rem)]'
@@ -49,6 +50,8 @@ function SidebarDockToggle() {
 }
 
 function DashboardLayout({ user, children, onLogout }) {
+  const loadNotifications = useNotificationStore((store) => store.loadNotifications)
+
   useEffect(() => {
     if (!user?.id) {
       return
@@ -56,6 +59,22 @@ function DashboardLayout({ user, children, onLogout }) {
 
     trackSessionAccess(user)
   }, [user])
+
+  useEffect(() => {
+    if (!user?.id) {
+      return
+    }
+
+    loadNotifications(user)
+
+    const intervalId = window.setInterval(() => {
+      loadNotifications(user)
+    }, 60_000)
+
+    return () => {
+      window.clearInterval(intervalId)
+    }
+  }, [user, loadNotifications])
 
   return (
     <SidebarProvider>

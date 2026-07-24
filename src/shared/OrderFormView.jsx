@@ -759,8 +759,10 @@ function OrderFormView({ mode = 'create', orderId = null }) {
             <OrderChatPanel
               orderUuid={orderUuid}
               orderLabel={mode === 'edit' ? orderId : ''}
+              clientName={form.clientName}
+              technicianId={form.technicianId}
               currentUser={user}
-              className="h-[min(70vh,36rem)] max-h-[min(70vh,36rem)]"
+              className="sticky top-6 z-10 h-[min(70vh,36rem)] max-h-[min(70vh,calc(100dvh-3rem))] max-md:top-20 max-md:max-h-[min(70vh,calc(100dvh-5.5rem))]"
             />
           </div>
         )}

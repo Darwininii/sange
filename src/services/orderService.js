@@ -240,6 +240,7 @@ export async function createOrder(orderData, { createdBy } = {}) {
       orderId: created.id,
       orderNumber: created.orderNumber,
       clientName: created.clientName,
+      technicianId: created.technicianId ?? '',
     },
   })
 
@@ -277,6 +278,7 @@ export async function updateOrder(orderId, orderData) {
       orderId: updated.id,
       orderNumber: updated.orderNumber,
       clientName: updated.clientName,
+      technicianId: updated.technicianId ?? '',
     },
   })
 
@@ -370,7 +372,11 @@ export async function getOrderMessages(orderUuid) {
   return (data ?? []).map(mapOrderMessage)
 }
 
-export async function sendOrderMessage(orderUuid, body, { userId, authorName } = {}) {
+export async function sendOrderMessage(
+  orderUuid,
+  body,
+  { userId, authorName, orderNumber, clientName, technicianId } = {},
+) {
   const client = requireSupabase()
   const trimmed = String(body ?? '').trim()
 
@@ -396,6 +402,24 @@ export async function sendOrderMessage(orderUuid, body, { userId, authorName } =
   if (error) {
     throw new Error(`No se pudo enviar el mensaje: ${error.message}`)
   }
+
+  const plainPreview = trimmed
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 80)
+
+  await registerActivitySafe({
+    userId,
+    action: activityActions.order_message,
+    metadata: {
+      orderId: orderUuid,
+      orderNumber: orderNumber ?? '',
+      clientName: clientName ?? '',
+      technicianId: technicianId ?? '',
+      preview: plainPreview,
+    },
+  })
 
   return mapOrderMessage(data)
 }
