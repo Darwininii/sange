@@ -64,12 +64,30 @@ function NotificationList({
   onItemClick,
   className,
 }) {
+  const listRef = React.useRef(null)
   const recentItems = React.useMemo(
     () => items.filter(isWithinLast24Hours),
     [items],
   )
   const unreadCount = recentItems.filter((item) => item.unread).length
   const canScroll = recentItems.length > VISIBLE_AT_ONCE
+
+  React.useEffect(() => {
+    const node = listRef.current
+    if (!node) {
+      return undefined
+    }
+
+    // Native passive listener avoids Chrome's non-passive wheel warning from React onWheel.
+    const handleWheel = (event) => {
+      event.stopPropagation()
+    }
+
+    node.addEventListener('wheel', handleWheel, { passive: true })
+    return () => {
+      node.removeEventListener('wheel', handleWheel)
+    }
+  }, [])
 
   return (
     <motion.div
@@ -81,12 +99,12 @@ function NotificationList({
       whileHover="expanded"
     >
       <div
+        ref={listRef}
         className={cn(
           LIST_MAX_HEIGHT_CLASS,
           canScroll && 'overflow-y-auto overscroll-contain pr-1',
           !canScroll && 'overflow-hidden',
         )}
-        onWheel={(event) => event.stopPropagation()}
       >
         {recentItems.length === 0 ? (
           <div className="rounded-xl bg-background px-4 py-6 text-center text-xs font-medium text-foreground/55">
