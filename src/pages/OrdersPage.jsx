@@ -1,10 +1,19 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from '@tanstack/react-router'
+import { FaRegEye } from 'react-icons/fa'
+import { IoIosListBox } from 'react-icons/io'
 import { IoSearchCircleSharp } from 'react-icons/io5'
 import { TbEdit } from 'react-icons/tb'
 import DashboardLayout from '../components/layout/DashboardLayout'
 import Loader from '../hooks/Loader'
 import appToast from '../hooks/appToast'
+import {
+  Card,
+  CardContent,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from '../shared/Card'
 import CustomBadge from '../shared/CustomBadge'
 import DashboardListSection from '../shared/DashboardListSection'
 import Pagination from '../shared/Pagination'
@@ -84,11 +93,32 @@ function matchesOrderSearch(order, query) {
   return haystack.includes(normalized)
 }
 
+/** Primer nombre + primer apellido; el overflow se corta con CSS (…). */
+function formatTechnicianClientName(fullName) {
+  const parts = String(fullName ?? '')
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+
+  if (parts.length === 0) {
+    return 'Sin cliente'
+  }
+
+  return parts.slice(0, 2).join(' ')
+}
+
+function getOrderRecencyTime(order) {
+  const updated = order?.updatedAt ? new Date(order.updatedAt).getTime() : 0
+  const created = order?.createdAt ? new Date(order.createdAt).getTime() : 0
+  return Math.max(updated || 0, created || 0)
+}
+
 function OrdersPage() {
   const navigate = useNavigate()
   const user = useAuthStore((state) => state.user)
   const logout = useAuthStore((state) => state.logout)
   const [search, setSearch] = useState('')
+  const isTechnician = user?.role === 'technician'
 
   const {
     data: ordersData,
@@ -100,7 +130,20 @@ function OrdersPage() {
     enabled: Boolean(user?.id),
   })
 
-  const orders = Array.isArray(ordersData) ? ordersData : []
+  const userId = user?.id
+
+  const orders = useMemo(() => {
+    const list = Array.isArray(ordersData) ? ordersData : []
+    if (!isTechnician || !userId) {
+      return list
+    }
+
+    return list
+      .filter((order) => order.technicianId === userId)
+      .slice()
+      .sort((a, b) => getOrderRecencyTime(b) - getOrderRecencyTime(a))
+  }, [ordersData, isTechnician, userId])
+
   const filteredOrders = useMemo(
     () => orders.filter((order) => matchesOrderSearch(order, search.trim())),
     [orders, search],
@@ -115,7 +158,7 @@ function OrdersPage() {
     paginate,
   } = usePagination({
     totalItems: filteredOrders.length,
-    storageKey: 'orders',
+    storageKey: isTechnician ? 'orders-technician' : 'orders',
   })
 
   const visibleOrders = paginate(filteredOrders)
@@ -138,26 +181,38 @@ function OrdersPage() {
     navigate({ to: '/' })
   }
 
+  const searchField = (
+    <div className="relative w-full min-w-[16rem] sm:w-72 sm:max-w-xs">
+      <IoSearchCircleSharp className="pointer-events-none absolute left-3 top-1/2 size-6.5 -translate-y-1/2 text-foreground/45" />
+      <input
+        className="w-full rounded-2xl border border-border bg-background py-2.5 pl-10 pr-4 text-sm outline-none focus:border-primary focus:ring-4 focus:ring-primary/20"
+        value={search}
+        placeholder="Buscar orden..."
+        onChange={(event) => setSearch(event.target.value)}
+        aria-label="Buscar ordenes"
+      />
+    </div>
+  )
+
   return (
     <DashboardLayout user={user} onLogout={handleLogout}>
       <DashboardListSection
-        title="Gestion de ordenes"
-        sectionTitle="Ordenes registradas"
-        description="Consulta y crea ordenes de servicio tecnico."
-        createLabel="Crear orden"
-        onCreate={() => navigate({ to: '/dashboard/orders/new' })}
-        actions={
-          <div className="relative w-full min-w-[16rem] sm:w-72 sm:max-w-xs">
-            <IoSearchCircleSharp className="pointer-events-none absolute left-3 top-1/2 size-6.5 -translate-y-1/2 text-foreground/45" />
-            <input
-              className="w-full rounded-2xl border border-border bg-background py-2.5 pl-10 pr-4 text-sm outline-none focus:border-primary focus:ring-4 focus:ring-primary/20"
-              value={search}
-              placeholder="Buscar orden..."
-              onChange={(event) => setSearch(event.target.value)}
-              aria-label="Buscar ordenes"
-            />
-          </div>
+        title={isTechnician ? 'Mis ordenes' : 'Gestion de ordenes'}
+        sectionTitle={
+          isTechnician ? 'Ordenes asignadas' : 'Ordenes registradas'
         }
+        description={
+          isTechnician
+            ? 'Consulta las ordenes que te han asignado.'
+            : 'Consulta y crea ordenes de servicio tecnico.'
+        }
+        createLabel={isTechnician ? undefined : 'Crear orden'}
+        onCreate={
+          isTechnician
+            ? undefined
+            : () => navigate({ to: '/dashboard/orders/new' })
+        }
+        actions={searchField}
       >
         {isLoading ? (
           <div className="flex justify-center rounded-3xl bg-background px-5 py-8">
@@ -168,11 +223,16 @@ function OrdersPage() {
           </div>
         ) : orders.length === 0 ? (
           <div className="rounded-3xl border border-dashed border-border bg-background px-5 py-10 text-center">
-            <p className="font-semibold text-foreground">
-              Aún no hay ordenes creadas
+            <IoIosListBox className="mx-auto size-10 text-foreground/30" />
+            <p className="mt-3 font-semibold text-foreground">
+              {isTechnician
+                ? 'Aun no tienes ordenes asignadas'
+                : 'Aún no hay ordenes creadas'}
             </p>
             <p className="mt-2 text-sm text-foreground/55">
-              Usa el boton "Crear orden" para registrar la primera.
+              {isTechnician
+                ? 'Cuando te asignen una orden, aparecera aqui.'
+                : 'Usa el boton "Crear orden" para registrar la primera.'}
             </p>
           </div>
         ) : filteredOrders.length === 0 ? (
@@ -182,6 +242,53 @@ function OrdersPage() {
               No hay ordenes que coincidan con la busqueda.
             </p>
           </div>
+        ) : isTechnician ? (
+          <>
+            <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-5">
+              {visibleOrders.map((order) => (
+                <Card key={order.uuid ?? order.id} className="rounded-xl">
+                  <CardHeader className="min-w-0 gap-0 px-2.5 pt-2.5">
+                    <CardTitle className="truncate text-sm">
+                      {formatTechnicianClientName(order.clientName)}
+                    </CardTitle>
+                    <p className="truncate text-[9px] font-semibold uppercase tracking-wide text-foreground/45">
+                      Orden #{order.id}
+                    </p>
+                  </CardHeader>
+                  <CardContent className="px-2.5 pb-2.5 pt-1">
+                    <p className="truncate text-[10px] text-foreground/45">
+                      {formatOrderDate(order.createdAt)}
+                    </p>
+                  </CardContent>
+                  <CardFooter className="gap-1 px-2 py-1.5">
+                    <ProfileActionButton
+                      icon={FaRegEye}
+                      label="Ver orden"
+                      tooltip="Ver orden"
+                      tone="blue"
+                      className="size-7 border-none"
+                      onClick={() =>
+                        navigate({
+                          to: '/dashboard/orders/view/$orderId',
+                          params: { orderId: order.id },
+                        })
+                      }
+                    />
+                  </CardFooter>
+                </Card>
+              ))}
+            </div>
+
+            <div className="mt-6">
+              <Pagination
+                page={page}
+                totalPages={totalPages}
+                onPageChange={setPage}
+                pageSize={pageSize}
+                onPageSizeChange={setPageSize}
+              />
+            </div>
+          </>
         ) : (
           <Table
             footer={

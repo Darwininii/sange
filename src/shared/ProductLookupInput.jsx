@@ -19,6 +19,7 @@ function ProductLookupInput({
   const containerRef = useRef(null)
   const [isOpen, setIsOpen] = useState(false)
   const [activeIndex, setActiveIndex] = useState(-1)
+  const [resultsKey, setResultsKey] = useState('')
 
   const fuse = useMemo(
     () =>
@@ -43,9 +44,14 @@ function ProductLookupInput({
       .map((entry) => entry.item)
   }, [fuse, products.length, value])
 
-  useEffect(() => {
+  const nextResultsKey = `${String(value ?? '').trim()}\0${results
+    .map((product) => product.id)
+    .join(',')}`
+
+  if (nextResultsKey !== resultsKey) {
+    setResultsKey(nextResultsKey)
     setActiveIndex(results.length > 0 ? 0 : -1)
-  }, [results])
+  }
 
   useEffect(() => {
     function handlePointerDown(event) {

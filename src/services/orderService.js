@@ -232,6 +232,7 @@ export async function createOrder(orderData, { createdBy } = {}) {
   }
 
   const created = mapOrder(data)
+  const assignedTechnicianId = created.technicianId ?? ''
 
   await registerActivitySafe({
     userId: createdBy,
@@ -240,7 +241,8 @@ export async function createOrder(orderData, { createdBy } = {}) {
       orderId: created.id,
       orderNumber: created.orderNumber,
       clientName: created.clientName,
-      technicianId: created.technicianId ?? '',
+      technicianId: assignedTechnicianId,
+      assigned: Boolean(assignedTechnicianId),
     },
   })
 
@@ -254,6 +256,18 @@ export async function updateOrder(orderId, orderData) {
   if (orderNumber === null) {
     throw new Error('Numero de orden invalido.')
   }
+
+  const { data: previousRow, error: previousError } = await client
+    .from('orders')
+    .select('assigned_technician_id')
+    .eq('order_number', orderNumber)
+    .maybeSingle()
+
+  if (previousError) {
+    throw mapOrderWriteError(previousError, 'No se pudo actualizar la orden')
+  }
+
+  const previousTechnicianId = previousRow?.assigned_technician_id ?? ''
 
   const { data, error } = await client
     .from('orders')
@@ -271,6 +285,9 @@ export async function updateOrder(orderId, orderData) {
   }
 
   const updated = mapOrder(data)
+  const nextTechnicianId = updated.technicianId ?? ''
+  const assigned =
+    Boolean(nextTechnicianId) && nextTechnicianId !== previousTechnicianId
 
   await registerActivitySafe({
     action: activityActions.order_update,
@@ -278,7 +295,9 @@ export async function updateOrder(orderId, orderData) {
       orderId: updated.id,
       orderNumber: updated.orderNumber,
       clientName: updated.clientName,
-      technicianId: updated.technicianId ?? '',
+      technicianId: nextTechnicianId,
+      previousTechnicianId,
+      assigned,
     },
   })
 

@@ -1,7 +1,6 @@
 import { forwardRef, useEffect, useImperativeHandle, useState } from 'react'
 import { EditorContent, useEditor } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
-import Underline from '@tiptap/extension-underline'
 import { TbBold, TbItalic, TbUnderline } from 'react-icons/tb'
 import AppButton from './AppButton'
 import { isEmptyChatHtml } from './chatComposerUtils'
@@ -58,7 +57,6 @@ const ChatComposer = forwardRef(function ChatComposer(
         orderedList: false,
         listItem: false,
       }),
-      Underline,
     ],
     content: value || '',
     editable: !disabled,

@@ -238,13 +238,13 @@ a {
   }
 }
 
-/* Toast host: react-hot-toast (top-right, sin bloquear la pagina) */
+/* Toast host: react-hot-toast — no bloquear clics fuera del toast */
 .sange-toast-host {
   pointer-events: none !important;
 }
 
 .sange-toast-host > div {
-  pointer-events: auto;
+  pointer-events: none !important;
 }
 
 .chat-composer-editor p,

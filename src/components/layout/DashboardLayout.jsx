@@ -76,6 +76,10 @@ function DashboardLayout({ user, children, onLogout }) {
     }
   }, [user, loadNotifications])
 
+  if (!user) {
+    return null
+  }
+
   return (
     <SidebarProvider>
       <AppSidebar user={user} onLogout={onLogout} />

@@ -16,7 +16,8 @@ function AppToastProvider() {
       toastOptions={{
         duration: TOAST_TIMEOUT,
         style: {
-          maxWidth: 360,
+          width: 360,
+          maxWidth: 'calc(100vw - 2rem)',
           padding: 0,
           background: 'transparent',
           boxShadow: 'none',

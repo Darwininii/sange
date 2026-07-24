@@ -164,7 +164,15 @@ export async function getCurrentSessionUser() {
 }
 
 export async function signOutUser() {
-  if (isSupabaseConfigured) {
-    await supabase.auth.signOut()
+  if (!isSupabaseConfigured || !supabase) {
+    return
+  }
+
+  // Local scope clears this browser session. Global revoke often returns 403
+  // when the server session/token is already gone/invalid.
+  try {
+    await supabase.auth.signOut({ scope: 'local' })
+  } catch {
+    // App-level logout still proceeds via authStore.logout().
   }
 }

@@ -54,6 +54,7 @@ function InputProfile({
   phoneDescription =
     'Ingresa tu número de celular actualizado para mantener tus datos al día.',
   className,
+  submitClassName,
 }) {
   const isPasswordMode = mode === 'password'
   const isPhoneMode = mode === 'phone'
@@ -62,8 +63,10 @@ function InputProfile({
   const hasPasswordConfirmation = requireConfirm && confirmPassword.length > 0
   const passwordsMatch =
     hasPasswordConfirmation && password === confirmPassword
-  const canSubmitPassword =
-    !requireConfirm || (password.length >= 6 && passwordsMatch && !isSubmitting)
+  const passwordsAreValid =
+    !requireConfirm || (password.length >= 6 && passwordsMatch)
+  const isPasswordSubmitLocked =
+    isPasswordMode && requireConfirm && !passwordsAreValid
 
   const resolvedSubmitLabel =
     submitLabel ??
@@ -248,9 +251,9 @@ function InputProfile({
 
       <AppButton
         type="submit"
-        className="w-full"
-        variant={requireConfirm ? 'dark' : 'solid'}
-        disabled={isPasswordMode && requireConfirm && !canSubmitPassword}
+        className={cn('w-full', isPasswordSubmitLocked && submitClassName)}
+        variant={isPasswordSubmitLocked ? 'dark' : 'solid'}
+        disabled={isPasswordSubmitLocked}
         isLoading={isSubmitting}
       >
         {resolvedSubmitLabel}

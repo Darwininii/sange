@@ -59,28 +59,20 @@ export const dashboardByRole = {
   },
   technician: {
     title: 'Panel tecnico',
-    description: 'Seguimiento de ordenes, notas de servicio y consulta de piezas.',
+    description: 'Consulta las ordenes que te han asignado y su estado.',
     stats: [
-      { label: 'Ordenes asignadas', value: '18', detail: '5 en revision' },
-      { label: 'Notas registradas', value: '46', detail: 'Semana actual' },
-      { label: 'Piezas consultadas', value: '12', detail: 'Disponibilidad validada' },
+      { label: 'Ordenes asignadas', value: '—', detail: 'Tus servicios' },
+      { label: 'Pendientes', value: '—', detail: 'Por revisar' },
+      { label: 'Completadas', value: '—', detail: 'Historiente' },
     ],
     modules: [
       {
-        title: 'Ordenes existentes',
-        description: 'Ver ordenes, estados y antecedentes del servicio.',
+        title: 'Ordenes asignadas',
+        description: 'Revisa en cards las ordenes que te corresponden.',
       },
       {
-        title: 'Notas y bitacora',
-        description: 'Agregar observaciones tecnicas visibles para todo el equipo.',
-      },
-      {
-        title: 'Consulta de inventario',
-        description: 'Ver disponibilidad de piezas antes de solicitarlas.',
-      },
-      {
-        title: 'Nueva orden tecnica',
-        description: 'Crear ordenes sin modificar valores financieros ni catalogos.',
+        title: 'Notificaciones',
+        description: 'Recibe avisos cuando te asignen una orden nueva.',
       },
     ],
   },

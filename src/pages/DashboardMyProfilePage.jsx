@@ -59,6 +59,7 @@ function ActionField({ label, value, placeholder, icon, tooltip, tone = 'blue', 
           tooltip={tooltip ?? label}
           tone={tone}
           onClick={onClick}
+          className="border-none"
         />
       </div>
     </div>
@@ -287,6 +288,7 @@ function DashboardMyProfilePage() {
                 onSubmit={handleChangePassword}
                 passwordDescription="Define una nueva contraseña personal y confirma que coincida."
                 submitLabel="Guardar contraseña"
+                submitClassName="text-[#1a2340] dark:text-primary hover:text-none"
               />
             </AppDialog>
           </>

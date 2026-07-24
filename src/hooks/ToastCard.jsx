@@ -38,7 +38,7 @@ function ToastCard({
   return (
     <div
       className={cn(
-        'group pointer-events-auto flex w-[min(360px,calc(100vw-2rem))] items-start gap-3 rounded-3x1 bg-surface px-4 py-3 shadow-lg shadow-black/40 ring-1 ring-border transition-all duration-200',
+        'group pointer-events-auto flex w-[360px] max-w-[calc(100vw-2rem)] shrink-0 items-start gap-3 rounded-3xl bg-surface px-4 py-3 shadow-lg shadow-black/40 ring-1 ring-border transition-all duration-200',
         visible ? 'translate-y-0 opacity-100' : '-translate-y-2 opacity-0',
       )}
       role="status"

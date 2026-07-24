@@ -2,6 +2,7 @@ import {
   createRootRoute,
   createRoute,
   createRouter,
+  notFound,
   redirect,
 } from '@tanstack/react-router'
 import App from '../App'
@@ -15,6 +16,8 @@ import LoginPage from '../pages/LoginPage'
 import EditOrderPage from '../pages/EditOrderPage'
 import NewOrderPage from '../pages/NewOrderPage'
 import OrdersPage from '../pages/OrdersPage'
+import PageNoFound from '../pages/PageNoFound'
+import ViewOrderPage from '../pages/ViewOrderPage'
 import { useAuthStore } from '../store/authStore'
 import { getCurrentSessionUser } from '../utils/auth'
 
@@ -34,15 +37,22 @@ async function getActiveUser() {
   return sessionUser
 }
 
-async function requireDashboardUser({ adminOnly = false } = {}) {
+async function requireDashboardUser({
+  adminOnly = false,
+  blockedRoles = [],
+} = {}) {
   const user = await getActiveUser()
 
   if (!user) {
-    throw redirect({ to: '/' })
+    throw notFound()
   }
 
   if (adminOnly && user.role !== 'admin') {
-    throw redirect({ to: '/dashboard' })
+    throw notFound()
+  }
+
+  if (blockedRoles.includes(user.role)) {
+    throw notFound()
   }
 
   return user
@@ -50,6 +60,7 @@ async function requireDashboardUser({ adminOnly = false } = {}) {
 
 const rootRoute = createRootRoute({
   component: App,
+  notFoundComponent: PageNoFound,
 })
 
 const loginRoute = createRoute({
@@ -116,7 +127,7 @@ const dashboardInventoryRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/dashboard/inventory',
   beforeLoad: async () => {
-    await requireDashboardUser()
+    await requireDashboardUser({ blockedRoles: ['technician'] })
   },
   component: DashboardInventoryPage,
 })
@@ -134,7 +145,7 @@ const dashboardNewOrderRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/dashboard/orders/new',
   beforeLoad: async () => {
-    await requireDashboardUser()
+    await requireDashboardUser({ blockedRoles: ['technician'] })
   },
   component: NewOrderPage,
 })
@@ -143,9 +154,18 @@ const dashboardEditOrderRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/dashboard/orders/edit/$orderId',
   beforeLoad: async () => {
-    await requireDashboardUser()
+    await requireDashboardUser({ blockedRoles: ['technician'] })
   },
   component: EditOrderPage,
+})
+
+const dashboardViewOrderRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/dashboard/orders/view/$orderId',
+  beforeLoad: async () => {
+    await requireDashboardUser()
+  },
+  component: ViewOrderPage,
 })
 
 const routeTree = rootRoute.addChildren([
@@ -159,6 +179,11 @@ const routeTree = rootRoute.addChildren([
   dashboardOrdersRoute,
   dashboardNewOrderRoute,
   dashboardEditOrderRoute,
+  dashboardViewOrderRoute,
 ])
 
-export const router = createRouter({ routeTree })
+export const router = createRouter({
+  routeTree,
+  defaultNotFoundComponent: PageNoFound,
+  notFoundMode: 'root',
+})

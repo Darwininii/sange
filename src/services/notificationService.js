@@ -36,11 +36,7 @@ const PROFILE_ACTIONS = [
 export function getNotificationActionsForRole(role) {
   switch (role) {
     case 'technician':
-      return [
-        ...ORDER_ACTIONS,
-        activityActions.inventory_create,
-        activityActions.inventory_update,
-      ]
+      return [...ORDER_ACTIONS]
     case 'cashier':
       return [...ORDER_ACTIONS, ...INVENTORY_ACTIONS]
     case 'admin':
@@ -66,12 +62,20 @@ export function getNotificationCategory(action) {
   return null
 }
 
-export function getNotificationHref(activity) {
+export function getNotificationHref(activity, user = null) {
   const metadata = activity?.metadata ?? {}
   const category = getNotificationCategory(activity?.action)
 
   if (category === notificationCategories.orders) {
     const orderNumber = metadata.orderNumber ?? metadata.orderId
+
+    if (user?.role === 'technician') {
+      if (orderNumber) {
+        return `/dashboard/orders/view/${orderNumber}`
+      }
+      return '/dashboard/orders'
+    }
+
     if (orderNumber) {
       return `/dashboard/orders/edit/${orderNumber}`
     }
@@ -120,7 +124,26 @@ export function formatNotificationTime(value) {
   }).format(date)
 }
 
-function getNotificationTitle(activity) {
+function isAssignmentNotification(activity) {
+  const metadata = activity?.metadata ?? {}
+  if (metadata.assigned) {
+    return true
+  }
+
+  return (
+    activity?.action === activityActions.order_create &&
+    Boolean(metadata.technicianId)
+  )
+}
+
+function getNotificationTitle(activity, user = null) {
+  if (
+    user?.role === 'technician' &&
+    isAssignmentNotification(activity)
+  ) {
+    return 'Orden asignada'
+  }
+
   switch (activity?.action) {
     case activityActions.order_create:
       return 'Nueva orden'
@@ -151,9 +174,18 @@ function getNotificationTitle(activity) {
   }
 }
 
-function getNotificationSubtitle(activity) {
+function getNotificationSubtitle(activity, user = null) {
   const metadata = activity?.metadata ?? {}
   const actor = formatActorName(activity?.profiles)
+  const clientRef = metadata.clientName
+    ? String(metadata.clientName)
+    : metadata.orderNumber
+      ? `orden #${metadata.orderNumber}`
+      : 'una orden'
+
+  if (user?.role === 'technician' && isAssignmentNotification(activity)) {
+    return `${actor} te asigno ${clientRef}`
+  }
 
   if (activity?.action === activityActions.order_message) {
     const orderRef = metadata.orderNumber
@@ -169,7 +201,23 @@ function getNotificationSubtitle(activity) {
   return getActivityMessage(activity)
 }
 
-export function mapActivityToNotification(activity) {
+/** Technicians only see orders assigned to them (and messages on those). */
+function isRelevantForTechnician(activity, userId) {
+  const metadata = activity?.metadata ?? {}
+  const technicianId = String(metadata.technicianId ?? '')
+
+  if (!technicianId || technicianId !== String(userId)) {
+    return false
+  }
+
+  if (activity.action === activityActions.order_message) {
+    return true
+  }
+
+  return isAssignmentNotification(activity)
+}
+
+export function mapActivityToNotification(activity, user = null) {
   const category = getNotificationCategory(activity?.action)
 
   if (!category) {
@@ -180,11 +228,11 @@ export function mapActivityToNotification(activity) {
     id: activity.id,
     action: activity.action,
     category,
-    title: getNotificationTitle(activity),
-    subtitle: getNotificationSubtitle(activity),
+    title: getNotificationTitle(activity, user),
+    subtitle: getNotificationSubtitle(activity, user),
     time: formatNotificationTime(activity.created_at),
     createdAt: activity.created_at,
-    href: getNotificationHref(activity),
+    href: getNotificationHref(activity, user),
     metadata: activity.metadata ?? {},
     userId: activity.user_id,
     unread: true,
@@ -202,19 +250,28 @@ export async function getNotificationsForUser(user, { limit = 30 } = {}) {
     return []
   }
 
+  const fetchLimit = user.role === 'technician' ? Math.max(limit * 3, 60) : limit
+
   const { data, error } = await supabase
     .from('activity_logs')
     .select('id, action, metadata, created_at, user_id')
     .in('action', actions)
     .neq('user_id', user.id)
     .order('created_at', { ascending: false })
-    .limit(limit)
+    .limit(fetchLimit)
 
   if (error) {
     throw new Error(`No se pudieron cargar las notificaciones: ${error.message}`)
   }
 
-  const activityLogs = data ?? []
+  let activityLogs = data ?? []
+
+  if (user.role === 'technician') {
+    activityLogs = activityLogs
+      .filter((activity) => isRelevantForTechnician(activity, user.id))
+      .slice(0, limit)
+  }
+
   const userIds = [...new Set(activityLogs.map((item) => item.user_id))]
 
   if (userIds.length === 0) {
@@ -236,10 +293,13 @@ export async function getNotificationsForUser(user, { limit = 30 } = {}) {
 
   return activityLogs
     .map((activity) =>
-      mapActivityToNotification({
-        ...activity,
-        profiles: profilesById.get(activity.user_id) ?? null,
-      }),
+      mapActivityToNotification(
+        {
+          ...activity,
+          profiles: profilesById.get(activity.user_id) ?? null,
+        },
+        user,
+      ),
     )
     .filter(Boolean)
 }

@@ -70,6 +70,16 @@ const adminItems = [
   },
 ]
 
+const TECHNICIAN_NAV_PATHS = new Set(['/dashboard', '/dashboard/orders'])
+
+function getNavigationItemsForRole(role) {
+  if (role === 'technician') {
+    return navigationItems.filter((item) => TECHNICIAN_NAV_PATHS.has(item.to))
+  }
+
+  return navigationItems
+}
+
 const roleLabels = {
   admin: 'Administrador',
   cashier: 'Cajero',
@@ -157,11 +167,17 @@ function AppSidebar({ user, onLogout }) {
   const pathname = useRouterState({
     select: (routerState) => routerState.location.pathname,
   })
+  const unreadByCategory = useNotificationStore((store) => store.unreadByCategory)
+
+  // During logout, user becomes null before navigation finishes.
+  if (!user) {
+    return null
+  }
 
   const isAdmin = user.role === 'admin'
   const displayName = getDisplayName(user)
   const userMenuOptions = getUserMenuOptions(theme)
-  const unreadByCategory = useNotificationStore((store) => store.unreadByCategory)
+  const visibleNavigationItems = getNavigationItemsForRole(user.role)
 
   const navBadgeByPath = {
     '/dashboard/orders': unreadByCategory.orders,
@@ -196,7 +212,7 @@ function AppSidebar({ user, onLogout }) {
           </SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu className="px-2 group-data-[collapsible=icon]:items-center group-data-[collapsible=icon]:px-0">
-              {navigationItems.map((item) => (
+              {visibleNavigationItems.map((item) => (
                 <NavItem
                   key={item.label}
                   item={item}
