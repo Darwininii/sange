@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { lazy, Suspense, useEffect, useMemo, useState } from 'react'
 import { useNavigate } from '@tanstack/react-router'
 import { FaFilePdf } from 'react-icons/fa6'
 import { IoAddCircle } from 'react-icons/io5'
@@ -12,15 +12,26 @@ import AppSelect from './select'
 import AppButton from './AppButton'
 import ClientLookupInput from './ClientLookupInput'
 import ConfirmActions from './ConfirmActions'
-import DatePicker from './DatePicker'
-import OrderChatPanel from './OrderChatPanel'
-import OrderPdfPreviewDialog from './OrderPdfPreviewDialog'
 import ProductLookupInput from './ProductLookupInput'
 import {
   applyClientToOrderForm,
   CLIENT_SEARCH_KEYS,
 } from './clientOrderMap'
 import { buildOrderPdfData, PDF_PARTS_MAX_ROWS } from './orderPdfConstants'
+
+const DatePicker = lazy(() => import('./DatePicker'))
+const OrderChatPanel = lazy(() => import('./OrderChatPanel'))
+const OrderPdfPreviewDialog = lazy(() => import('./OrderPdfPreviewDialog'))
+
+const EMPTY_LIST = []
+const dateFallback = (
+  <div className="h-18 animate-pulse rounded-2xl bg-foreground/5" />
+)
+const chatFallback = (
+  <div className="sticky top-6 flex h-[min(70vh,36rem)] items-center justify-center rounded-4xl border border-border bg-surface text-sm text-foreground/55">
+    Cargando chat...
+  </div>
+)
 import {
   SERVICE_CONDITION_OPTIONS,
   SERVICE_TYPE_OPTIONS,
@@ -90,23 +101,31 @@ function OrderFormView({ mode = 'create', orderId = null }) {
   const [isLoadingOrder, setIsLoadingOrder] = useState(mode === 'edit')
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isPdfOpen, setIsPdfOpen] = useState(false)
+  const [isChatReady, setIsChatReady] = useState(false)
   const config = modeConfig[mode] ?? modeConfig.create
   const isWarranty = form.serviceCondition === 'warranty'
   const isBilled = form.serviceCondition === 'billed'
+  const userId = user?.id
 
   const { data: clientsData } = useCachedData({
     cacheKey: 'clients',
     fetcher: getClients,
-    enabled: Boolean(user?.id),
+    enabled: Boolean(userId),
   })
-  const clients = Array.isArray(clientsData) ? clientsData : []
+  const clients = useMemo(
+    () => (Array.isArray(clientsData) ? clientsData : EMPTY_LIST),
+    [clientsData],
+  )
 
   const { data: productsData } = useCachedData({
     cacheKey: 'inventory-products',
     fetcher: getInventoryProducts,
-    enabled: Boolean(user?.id),
+    enabled: Boolean(userId),
   })
-  const products = Array.isArray(productsData) ? productsData : []
+  const products = useMemo(
+    () => (Array.isArray(productsData) ? productsData : EMPTY_LIST),
+    [productsData],
+  )
 
   const technicianName = useMemo(() => {
     if (!form.technicianId) {
@@ -119,19 +138,48 @@ function OrderFormView({ mode = 'create', orderId = null }) {
     )
   }, [form.technicianId, technicianOptions])
 
-  const pdfData = useMemo(
-    () =>
-      buildOrderPdfData({
-        form,
-        orderNumber: mode === 'edit' ? orderId : '',
-        technicianName,
-        generatedBy:
-          [user?.name, user?.lastName].filter(Boolean).join(' ').trim() ||
-          user?.nickname ||
-          '',
-      }),
-    [form, mode, orderId, technicianName, user],
-  )
+  // Only build PDF payload when the dialog is open.
+  const pdfData = useMemo(() => {
+    if (!isPdfOpen) {
+      return null
+    }
+
+    return buildOrderPdfData({
+      form,
+      orderNumber: mode === 'edit' ? orderId : '',
+      technicianName,
+      generatedBy:
+        [user?.name, user?.lastName].filter(Boolean).join(' ').trim() ||
+        user?.nickname ||
+        '',
+    })
+  }, [form, isPdfOpen, mode, orderId, technicianName, user])
+
+  // Mount TipTap chat after the form paints to keep navigation clicks responsive.
+  useEffect(() => {
+    if (isLoadingOrder) {
+      setIsChatReady(false)
+      return undefined
+    }
+
+    let timeoutId
+    const idleId = window.requestIdleCallback
+      ? window.requestIdleCallback(() => setIsChatReady(true), { timeout: 400 })
+      : null
+
+    if (idleId == null) {
+      timeoutId = window.setTimeout(() => setIsChatReady(true), 120)
+    }
+
+    return () => {
+      if (idleId != null && window.cancelIdleCallback) {
+        window.cancelIdleCallback(idleId)
+      }
+      if (timeoutId != null) {
+        window.clearTimeout(timeoutId)
+      }
+    }
+  }, [isLoadingOrder])
 
   useEffect(() => {
     let cancelled = false
@@ -407,11 +455,15 @@ function OrderFormView({ mode = 'create', orderId = null }) {
           </div>
         </section>
 
-        <OrderPdfPreviewDialog
-          open={isPdfOpen}
-          onOpenChange={setIsPdfOpen}
-          data={pdfData}
-        />
+        {isPdfOpen && pdfData ? (
+          <Suspense fallback={null}>
+            <OrderPdfPreviewDialog
+              open={isPdfOpen}
+              onOpenChange={setIsPdfOpen}
+              data={pdfData}
+            />
+          </Suspense>
+        ) : null}
 
         {isLoadingOrder ? (
           <div className="mt-6 flex justify-center rounded-4xl bg-surface px-5 py-10 shadow-sm ring-1 ring-border">
@@ -568,32 +620,47 @@ function OrderFormView({ mode = 'create', orderId = null }) {
                   />
                 </label>
 
-                <DatePicker
-                  label="Fecha de entrega"
-                  value={form.deliveryDate}
-                  placeholder="Seleccionar fecha"
-                  onChange={(deliveryDate) =>
-                    setForm((currentForm) => ({ ...currentForm, deliveryDate }))
-                  }
-                />
+                <Suspense fallback={dateFallback}>
+                  <DatePicker
+                    label="Fecha de entrega"
+                    value={form.deliveryDate}
+                    placeholder="Seleccionar fecha"
+                    onChange={(deliveryDate) =>
+                      setForm((currentForm) => ({
+                        ...currentForm,
+                        deliveryDate,
+                      }))
+                    }
+                  />
+                </Suspense>
 
-                <DatePicker
-                  label="Fecha de reparacion"
-                  value={form.repairDate}
-                  placeholder="Seleccionar fecha"
-                  onChange={(repairDate) =>
-                    setForm((currentForm) => ({ ...currentForm, repairDate }))
-                  }
-                />
+                <Suspense fallback={dateFallback}>
+                  <DatePicker
+                    label="Fecha de reparacion"
+                    value={form.repairDate}
+                    placeholder="Seleccionar fecha"
+                    onChange={(repairDate) =>
+                      setForm((currentForm) => ({
+                        ...currentForm,
+                        repairDate,
+                      }))
+                    }
+                  />
+                </Suspense>
 
-                <DatePicker
-                  label="Fecha de compra"
-                  value={form.purchaseDate}
-                  placeholder="Seleccionar fecha"
-                  onChange={(purchaseDate) =>
-                    setForm((currentForm) => ({ ...currentForm, purchaseDate }))
-                  }
-                />
+                <Suspense fallback={dateFallback}>
+                  <DatePicker
+                    label="Fecha de compra"
+                    value={form.purchaseDate}
+                    placeholder="Seleccionar fecha"
+                    onChange={(purchaseDate) =>
+                      setForm((currentForm) => ({
+                        ...currentForm,
+                        purchaseDate,
+                      }))
+                    }
+                  />
+                </Suspense>
 
                 <label className="md:col-span-2">
                   <FieldLabel>Sintoma</FieldLabel>
@@ -756,14 +823,20 @@ function OrderFormView({ mode = 'create', orderId = null }) {
               </div>
             </form>
 
-            <OrderChatPanel
-              orderUuid={orderUuid}
-              orderLabel={mode === 'edit' ? orderId : ''}
-              clientName={form.clientName}
-              technicianId={form.technicianId}
-              currentUser={user}
-              className="sticky top-6 z-10 h-[min(70vh,36rem)] max-h-[min(70vh,calc(100dvh-3rem))] max-md:top-20 max-md:max-h-[min(70vh,calc(100dvh-5.5rem))]"
-            />
+            {isChatReady ? (
+              <Suspense fallback={chatFallback}>
+                <OrderChatPanel
+                  orderUuid={orderUuid}
+                  orderLabel={mode === 'edit' ? orderId : ''}
+                  clientName={form.clientName}
+                  technicianId={form.technicianId}
+                  currentUser={user}
+                  className="sticky top-6 z-10 h-[min(70vh,36rem)] max-h-[min(70vh,calc(100dvh-3rem))] max-md:top-20 max-md:max-h-[min(70vh,calc(100dvh-5.5rem))]"
+                />
+              </Suspense>
+            ) : (
+              chatFallback
+            )}
           </div>
         )}
       </div>

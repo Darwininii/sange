@@ -1,4 +1,4 @@
-import { forwardRef, useEffect, useImperativeHandle, useState } from 'react'
+import { forwardRef, useEffect, useImperativeHandle } from 'react'
 import { EditorContent, useEditor } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
 import { TbBold, TbItalic, TbUnderline } from 'react-icons/tb'
@@ -41,10 +41,10 @@ const ChatComposer = forwardRef(function ChatComposer(
   },
   ref,
 ) {
-  const [, setEditorVersion] = useState(0)
-
   const editor = useEditor({
     immediatelyRender: false,
+    // Re-render on transactions so toolbar active states stay in sync
+    // without an extra setState listener that doubles work on every keystroke.
     shouldRerenderOnTransaction: true,
     extensions: [
       StarterKit.configure({
@@ -85,22 +85,6 @@ const ChatComposer = forwardRef(function ChatComposer(
       onChange?.(isEmptyChatHtml(html) ? '' : html)
     },
   })
-
-  useEffect(() => {
-    if (!editor) {
-      return undefined
-    }
-
-    const refresh = () => setEditorVersion((version) => version + 1)
-
-    editor.on('selectionUpdate', refresh)
-    editor.on('transaction', refresh)
-
-    return () => {
-      editor.off('selectionUpdate', refresh)
-      editor.off('transaction', refresh)
-    }
-  }, [editor])
 
   useImperativeHandle(
     ref,
