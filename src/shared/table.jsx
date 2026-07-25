@@ -9,7 +9,7 @@ function Table({ children, footer, className = '' }) {
       )}
     >
       <div className="w-full overflow-x-auto">
-        <table className="w-full min-w-[760px] border-collapse text-left">
+        <table className="w-full min-w-190 border-collapse text-left">
           {children}
         </table>
       </div>
