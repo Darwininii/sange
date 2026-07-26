@@ -53,15 +53,17 @@ export function normalizePartRows(parts, { minRows = 0, maxRows = PDF_PARTS_MAX_
   return normalized
 }
 
+export const PDF_EMPTY_DATE = '____/____/____'
+
 export function formatPdfDate(value = new Date()) {
   if (value == null || value === '') {
-    return 'YYYY/MM/DD'
+    return PDF_EMPTY_DATE
   }
 
   const date = value instanceof Date ? value : new Date(value)
 
   if (Number.isNaN(date.getTime())) {
-    return 'YYYY/MM/DD'
+    return PDF_EMPTY_DATE
   }
 
   const year = date.getFullYear()
@@ -74,7 +76,7 @@ export function formatPdfDate(value = new Date()) {
 /** Formats an HTML date input (YYYY-MM-DD) for the PDF slip. */
 export function formatFormDateForPdf(value) {
   const raw = String(value ?? '').trim()
-  if (!raw) return 'YYYY/MM/DD'
+  if (!raw) return PDF_EMPTY_DATE
 
   const match = raw.match(/^(\d{4})-(\d{2})-(\d{2})$/)
   if (match) {
@@ -100,6 +102,7 @@ export function buildOrderPdfData({
   form,
   orderNumber = '',
   technicianName = '',
+  technicianDocumentNumber = '',
   generatedBy = '',
   createdAt = null,
 }) {
@@ -109,6 +112,8 @@ export function buildOrderPdfData({
     date: formatPdfDate(createdAt || new Date()),
     clientName: form?.clientName?.trim() || '',
     clientPhone: form?.clientPhone?.trim() || '',
+    clientEmail: form?.clientEmail?.trim() || '',
+    clientAddress: form?.clientAddress?.trim() || '',
     deliveryDate: formatFormDateForPdf(form?.deliveryDate),
     repairDate: formatFormDateForPdf(form?.repairDate),
     purchaseDate: formatFormDateForPdf(form?.purchaseDate),
@@ -119,7 +124,7 @@ export function buildOrderPdfData({
     serviceType: form?.serviceType || '',
     serviceCondition: form?.serviceCondition || '',
     technicianName: technicianName?.trim() || '',
-    symptom: form?.symptom?.trim() || '',
+    technicianDocumentNumber: technicianDocumentNumber?.trim() || '',
     diagnosis: form?.diagnosis?.trim() || '',
     parts: normalizePartsForPdf(form?.parts),
     generatedBy: generatedBy?.trim() || '',

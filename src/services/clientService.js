@@ -8,10 +8,12 @@ export const INITIAL_CLIENT_VALUES = {
   name: '',
   documentNumber: '',
   phone: '',
+  email: '',
+  address: '',
 }
 
 const CLIENT_SELECT =
-  'id, name, document_number, phone, created_by, created_at, updated_at'
+  'id, name, document_number, phone, email, address, created_by, created_at, updated_at'
 
 function requireSupabase() {
   if (!isSupabaseConfigured || !supabase) {
@@ -33,6 +35,8 @@ function mapClient(row) {
     name: row.name ?? '',
     documentNumber: row.document_number ?? '',
     phone: row.phone ?? '',
+    email: row.email ?? '',
+    address: row.address ?? '',
     createdBy: row.created_by ?? null,
     createdAt: row.created_at ?? null,
     updatedAt: row.updated_at ?? null,
@@ -44,6 +48,8 @@ function toDbPayload(clientData) {
     name: String(clientData.name ?? '').trim(),
     document_number: String(clientData.documentNumber ?? '').trim(),
     phone: String(clientData.phone ?? '').trim(),
+    email: String(clientData.email ?? '').trim(),
+    address: String(clientData.address ?? '').trim(),
   }
 }
 
@@ -52,6 +58,8 @@ export function getClientFormValues(client) {
     name: client?.name ?? '',
     documentNumber: client?.documentNumber ?? '',
     phone: client?.phone ?? '',
+    email: client?.email ?? '',
+    address: client?.address ?? '',
   }
 }
 
@@ -74,8 +82,8 @@ export async function createClient(clientData, { createdBy } = {}) {
   const client = requireSupabase()
   const payload = toDbPayload(clientData)
 
-  if (!payload.name || !payload.document_number) {
-    throw new Error('Nombre y cedula son obligatorios.')
+  if (!payload.name) {
+    throw new Error('El nombre es obligatorio.')
   }
 
   const { data, error } = await client
@@ -119,8 +127,8 @@ export async function updateClient(clientId, clientData) {
 
   const payload = toDbPayload(clientData)
 
-  if (!payload.name || !payload.document_number) {
-    throw new Error('Nombre y cedula son obligatorios.')
+  if (!payload.name) {
+    throw new Error('El nombre es obligatorio.')
   }
 
   const { data, error } = await client

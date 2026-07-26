@@ -9,6 +9,11 @@ function DashboardPage() {
   const navigate = useNavigate()
   const user = useAuthStore((state) => state.user)
   const logout = useAuthStore((state) => state.logout)
+
+  if (!user) {
+    return null
+  }
+
   const dashboard = dashboardByRole[user.role] ?? dashboardByRole.technician
 
   async function handleLogout() {

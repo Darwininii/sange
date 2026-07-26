@@ -127,16 +127,19 @@ function OrderFormView({ mode = 'create', orderId = null }) {
     [productsData],
   )
 
-  const technicianName = useMemo(() => {
+  const selectedTechnician = useMemo(() => {
     if (!form.technicianId) {
-      return ''
+      return null
     }
 
     return (
-      technicianOptions.find((option) => option.value === form.technicianId)
-        ?.label || ''
+      technicianOptions.find((option) => option.value === form.technicianId) ||
+      null
     )
   }, [form.technicianId, technicianOptions])
+
+  const technicianName = selectedTechnician?.label || ''
+  const technicianDocumentNumber = selectedTechnician?.identification || ''
 
   // Only build PDF payload when the dialog is open.
   const pdfData = useMemo(() => {
@@ -148,12 +151,21 @@ function OrderFormView({ mode = 'create', orderId = null }) {
       form,
       orderNumber: mode === 'edit' ? orderId : '',
       technicianName,
+      technicianDocumentNumber,
       generatedBy:
         [user?.name, user?.lastName].filter(Boolean).join(' ').trim() ||
         user?.nickname ||
         '',
     })
-  }, [form, isPdfOpen, mode, orderId, technicianName, user])
+  }, [
+    form,
+    isPdfOpen,
+    mode,
+    orderId,
+    technicianDocumentNumber,
+    technicianName,
+    user,
+  ])
 
   // Mount TipTap chat after the form paints to keep navigation clicks responsive.
   useEffect(() => {
@@ -339,7 +351,7 @@ function OrderFormView({ mode = 'create', orderId = null }) {
       !form.issue.trim()
     ) {
       appToast.warning(
-        'Cliente, equipo, tipo de servicio, condicion y motivo son obligatorios.',
+        'Cliente, equipo, condicion, tipo de servicio y motivo son obligatorios.',
       )
       return
     }
@@ -365,6 +377,8 @@ function OrderFormView({ mode = 'create', orderId = null }) {
     const payload = {
       clientName: form.clientName.trim(),
       clientPhone: form.clientPhone.trim(),
+      clientEmail: form.clientEmail.trim(),
+      clientAddress: form.clientAddress.trim(),
       device: form.device.trim(),
       brand: form.brand.trim(),
       model: form.model.trim(),
@@ -380,7 +394,7 @@ function OrderFormView({ mode = 'create', orderId = null }) {
       deliveryDate: form.deliveryDate,
       repairDate: form.repairDate,
       purchaseDate: form.purchaseDate,
-      symptom: form.symptom.trim(),
+      symptom: '',
       diagnosis: form.diagnosis.trim(),
       parts: sanitizedParts,
     }
@@ -480,11 +494,11 @@ function OrderFormView({ mode = 'create', orderId = null }) {
             >
               <div className="grid gap-4 md:grid-cols-2">
                 <div>
-                  <FieldLabel required>Tipo de servicio</FieldLabel>
+                  <FieldLabel required>Condicion del servicio</FieldLabel>
                   <AppSelect
                     value={form.serviceType || undefined}
                     options={SERVICE_TYPE_OPTIONS}
-                    placeholder="Seleccionar tipo"
+                    placeholder="Seleccionar condicion"
                     onValueChange={(serviceType) =>
                       setForm((currentForm) => ({ ...currentForm, serviceType }))
                     }
@@ -492,11 +506,11 @@ function OrderFormView({ mode = 'create', orderId = null }) {
                 </div>
 
                 <div>
-                  <FieldLabel required>Condicion del servicio</FieldLabel>
+                  <FieldLabel required>Tipo de servicio</FieldLabel>
                   <AppSelect
                     value={form.serviceCondition || undefined}
                     options={SERVICE_CONDITION_OPTIONS}
-                    placeholder="Seleccionar condicion"
+                    placeholder="Seleccionar tipo"
                     onValueChange={(serviceCondition) =>
                       setForm((currentForm) => ({
                         ...currentForm,
@@ -534,13 +548,38 @@ function OrderFormView({ mode = 'create', orderId = null }) {
                   onSelectClient={handleSelectClient}
                 />
 
+                <div className="grid gap-4">
+                  <label>
+                    <FieldLabel>Telefono</FieldLabel>
+                    <input
+                      className={FIELD_CLASS}
+                      name="clientPhone"
+                      value={form.clientPhone}
+                      placeholder="Numero de contacto"
+                      onChange={handleChange}
+                    />
+                  </label>
+
+                  <label>
+                    <FieldLabel>Correo</FieldLabel>
+                    <input
+                      className={FIELD_CLASS}
+                      name="clientEmail"
+                      type="email"
+                      value={form.clientEmail}
+                      placeholder="Correo del cliente"
+                      onChange={handleChange}
+                    />
+                  </label>
+                </div>
+
                 <label>
-                  <FieldLabel>Telefono</FieldLabel>
+                  <FieldLabel>Direccion</FieldLabel>
                   <input
                     className={FIELD_CLASS}
-                    name="clientPhone"
-                    value={form.clientPhone}
-                    placeholder="Numero de contacto"
+                    name="clientAddress"
+                    value={form.clientAddress}
+                    placeholder="Direccion del cliente"
                     onChange={handleChange}
                   />
                 </label>
@@ -586,6 +625,17 @@ function OrderFormView({ mode = 'create', orderId = null }) {
                     name="serialNumber"
                     value={form.serialNumber}
                     placeholder="Serie unica del equipo"
+                    onChange={handleChange}
+                  />
+                </label>
+
+                <label>
+                  <FieldLabel>Orden externa (fabricante)</FieldLabel>
+                  <input
+                    className={FIELD_CLASS}
+                    name="externalOrderNumber"
+                    value={form.externalOrderNumber}
+                    placeholder="Ej. Sansu / fabricante"
                     onChange={handleChange}
                   />
                 </label>
@@ -663,20 +713,9 @@ function OrderFormView({ mode = 'create', orderId = null }) {
                 </Suspense>
 
                 <label className="md:col-span-2">
-                  <FieldLabel>Sintoma</FieldLabel>
-                  <textarea
-                    className={`${FIELD_CLASS} min-h-24 resize-y`}
-                    name="symptom"
-                    value={form.symptom}
-                    placeholder="Descripcion del sintoma reportado"
-                    onChange={handleChange}
-                  />
-                </label>
-
-                <label className="md:col-span-2">
                   <FieldLabel>Diagnostico</FieldLabel>
                   <textarea
-                    className={`${FIELD_CLASS} min-h-24 resize-y`}
+                    className={`${FIELD_CLASS} min-h-28 resize-y`}
                     name="diagnosis"
                     value={form.diagnosis}
                     placeholder="Diagnostico tecnico"
@@ -713,17 +752,6 @@ function OrderFormView({ mode = 'create', orderId = null }) {
                     />
                   </label>
                 ) : null}
-
-                <label>
-                  <FieldLabel>Orden externa (fabricante)</FieldLabel>
-                  <input
-                    className={FIELD_CLASS}
-                    name="externalOrderNumber"
-                    value={form.externalOrderNumber}
-                    placeholder="Ej. Sansu / fabricante"
-                    onChange={handleChange}
-                  />
-                </label>
 
                 <div className="md:col-span-2">
                   <div className="mb-1 flex flex-wrap items-center justify-between gap-2">

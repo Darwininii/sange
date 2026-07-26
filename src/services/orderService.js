@@ -11,6 +11,8 @@ import {
 export const INITIAL_ORDER_VALUES = {
   clientName: '',
   clientPhone: '',
+  clientEmail: '',
+  clientAddress: '',
   device: '',
   brand: '',
   model: '',
@@ -32,7 +34,7 @@ export const INITIAL_ORDER_VALUES = {
 }
 
 const ORDER_SELECT =
-  'id, order_number, client_name, client_phone, device, brand, model, serial_number, service_type, service_condition, assigned_technician_id, issue, service_cost, previous_service_notes, document_number, external_order_number, delivery_date, repair_date, purchase_date, symptom, diagnosis, parts, status, created_by, created_at, updated_at'
+  'id, order_number, client_name, client_phone, client_email, client_address, device, brand, model, serial_number, service_type, service_condition, assigned_technician_id, issue, service_cost, previous_service_notes, document_number, external_order_number, delivery_date, repair_date, purchase_date, symptom, diagnosis, parts, status, created_by, created_at, updated_at'
 
 function normalizeParts(parts) {
   const normalized = normalizePartRows(parts, { minRows: 1 })
@@ -61,6 +63,8 @@ export function getOrderFormValues(order) {
   return {
     clientName: order?.clientName ?? '',
     clientPhone: order?.clientPhone ?? '',
+    clientEmail: order?.clientEmail ?? '',
+    clientAddress: order?.clientAddress ?? '',
     device: order?.device ?? '',
     brand: order?.brand ?? '',
     model: order?.model ?? '',
@@ -104,6 +108,8 @@ function mapOrder(row) {
     orderNumber: row.order_number,
     clientName: row.client_name ?? '',
     clientPhone: row.client_phone ?? '',
+    clientEmail: row.client_email ?? '',
+    clientAddress: row.client_address ?? '',
     device: row.device ?? '',
     brand: row.brand ?? '',
     model: row.model ?? '',
@@ -142,6 +148,8 @@ function toDbPayload(orderData) {
   return {
     client_name: orderData.clientName,
     client_phone: orderData.clientPhone ?? '',
+    client_email: orderData.clientEmail ?? '',
+    client_address: orderData.clientAddress ?? '',
     device: orderData.device,
     brand: orderData.brand ?? '',
     model: orderData.model ?? '',
@@ -309,7 +317,7 @@ export async function getTechnicians() {
 
   const { data, error } = await client
     .from('profiles')
-    .select('id, name, last_name')
+    .select('id, name, last_name, identification')
     .eq('role', 'technician')
     .eq('access_revoked', false)
     .order('name', { ascending: true })
@@ -321,6 +329,7 @@ export async function getTechnicians() {
   return (data ?? []).map((profile) => ({
     value: profile.id,
     label: [profile.name, profile.last_name].filter(Boolean).join(' ').trim() || 'Tecnico',
+    identification: profile.identification ?? '',
   }))
 }
 

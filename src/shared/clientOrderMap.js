@@ -6,10 +6,18 @@ export const CLIENT_TO_ORDER_FIELDS = {
   name: 'clientName',
   documentNumber: 'documentNumber',
   phone: 'clientPhone',
+  email: 'clientEmail',
+  address: 'clientAddress',
 }
 
 /** Fuse.js keys used when looking up clients from the order form. */
-export const CLIENT_SEARCH_KEYS = ['name', 'documentNumber', 'phone']
+export const CLIENT_SEARCH_KEYS = [
+  'name',
+  'documentNumber',
+  'phone',
+  'email',
+  'address',
+]
 
 export function applyClientToOrderForm(form, client) {
   if (!client) {

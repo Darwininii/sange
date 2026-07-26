@@ -58,11 +58,12 @@ function isValidPhone(value) {
 }
 
 function isValidDocument(value) {
-  return value.trim().length >= 5
+  const trimmed = value.trim()
+  return !trimmed || trimmed.length >= 5
 }
 
 function hasRequiredFields(form) {
-  return Boolean(form.name.trim() && form.documentNumber.trim())
+  return Boolean(form.name.trim())
 }
 
 function matchesClientSearch(client, query) {
@@ -71,7 +72,13 @@ function matchesClientSearch(client, query) {
   }
 
   const normalized = query.toLowerCase()
-  const haystack = [client.name, client.documentNumber, client.phone]
+  const haystack = [
+    client.name,
+    client.documentNumber,
+    client.phone,
+    client.email,
+    client.address,
+  ]
     .filter(Boolean)
     .join(' ')
     .toLowerCase()
@@ -81,7 +88,7 @@ function matchesClientSearch(client, query) {
 
 function ClientFormFields({ values, onChange }) {
   return (
-    <div className="mt-5 grid gap-4">
+    <div className="mt-5 grid gap-4 sm:grid-cols-2">
       <label>
         <FieldLabel required>Nombre</FieldLabel>
         <input
@@ -95,14 +102,13 @@ function ClientFormFields({ values, onChange }) {
       </label>
 
       <label>
-        <FieldLabel required>Cc. (cedula)</FieldLabel>
+        <FieldLabel>Cc. (cedula)</FieldLabel>
         <input
           className={FIELD_CLASS}
           name="documentNumber"
           value={values.documentNumber}
           placeholder="Numero de documento"
           onChange={onChange}
-          required
         />
       </label>
 
@@ -113,6 +119,29 @@ function ClientFormFields({ values, onChange }) {
           name="phone"
           value={values.phone}
           placeholder="Numero de contacto"
+          onChange={onChange}
+        />
+      </label>
+
+      <label>
+        <FieldLabel>Correo</FieldLabel>
+        <input
+          className={FIELD_CLASS}
+          name="email"
+          type="email"
+          value={values.email}
+          placeholder="Correo del cliente"
+          onChange={onChange}
+        />
+      </label>
+
+      <label>
+        <FieldLabel>Direccion</FieldLabel>
+        <input
+          className={FIELD_CLASS}
+          name="address"
+          value={values.address}
+          placeholder="Direccion del cliente"
           onChange={onChange}
         />
       </label>
@@ -217,12 +246,12 @@ function DashboardClientsPage() {
     event?.preventDefault?.()
 
     if (!hasRequiredFields(clientForm)) {
-      appToast.warning('Nombre y cedula son obligatorios.')
+      appToast.warning('El nombre es obligatorio.')
       return
     }
 
     if (!isValidDocument(clientForm.documentNumber)) {
-      appToast.warning('La cedula debe tener al menos 5 caracteres.')
+      appToast.warning('Si ingresas cedula, debe tener al menos 5 caracteres.')
       return
     }
 
@@ -259,12 +288,12 @@ function DashboardClientsPage() {
     }
 
     if (!hasRequiredFields(editForm)) {
-      appToast.warning('Nombre y cedula son obligatorios.')
+      appToast.warning('El nombre es obligatorio.')
       return
     }
 
     if (!isValidDocument(editForm.documentNumber)) {
-      appToast.warning('La cedula debe tener al menos 5 caracteres.')
+      appToast.warning('Si ingresas cedula, debe tener al menos 5 caracteres.')
       return
     }
 
@@ -335,6 +364,7 @@ function DashboardClientsPage() {
             <AppDialog
               open={isCreateDialogOpen}
               title="Crear cliente"
+              className="max-w-2xl"
               onOpenChange={(open) => {
                 setIsCreateDialogOpen(open)
                 if (!open) {
@@ -363,6 +393,7 @@ function DashboardClientsPage() {
             <AppDialog
               open={Boolean(editClient)}
               title={`Editar cliente ${editClient?.name || ''}`}
+              className="max-w-2xl"
               onOpenChange={(open) => {
                 if (!open) {
                   setEditClient(null)
@@ -440,8 +471,8 @@ function DashboardClientsPage() {
             <TableHeader>
               <TableRow className="hover:bg-background">
                 <TableHead>Nombre</TableHead>
-                <TableHead>Cc.</TableHead>
-                <TableHead>Telefono</TableHead>
+                <TableHead>Correo</TableHead>
+                <TableHead>Direccion</TableHead>
                 <TableHead className="text-right">Acciones</TableHead>
               </TableRow>
             </TableHeader>
@@ -452,13 +483,13 @@ function DashboardClientsPage() {
                     <p className="font-bold text-foreground">{client.name}</p>
                   </TableCell>
                   <TableCell>
-                    <p className="text-sm text-foreground/80">
-                      {client.documentNumber || '—'}
+                    <p className="max-w-64 truncate text-sm text-foreground/80">
+                      {client.email || '—'}
                     </p>
                   </TableCell>
                   <TableCell>
-                    <p className="text-sm text-foreground/80">
-                      {client.phone || '—'}
+                    <p className="max-w-64 truncate text-sm text-foreground/80">
+                      {client.address || '—'}
                     </p>
                   </TableCell>
                   <TableCell>

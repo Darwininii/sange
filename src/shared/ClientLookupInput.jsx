@@ -156,6 +156,8 @@ function ClientLookupInput({
                   <span className="text-xs text-foreground/55">
                     Cc. {client.documentNumber || '—'}
                     {client.phone ? ` · Tel. ${client.phone}` : ''}
+                    {client.email ? ` · ${client.email}` : ''}
+                    {client.address ? ` · ${client.address}` : ''}
                   </span>
                 </button>
               </li>

@@ -80,6 +80,7 @@ function matchesOrderSearch(order, query) {
     order.externalOrderNumber,
     order.clientName,
     order.clientPhone,
+    order.clientEmail,
     order.device,
     order.brand,
     order.model,
@@ -306,8 +307,8 @@ function OrdersPage() {
                 <TableHead>Orden</TableHead>
                 <TableHead>Cliente</TableHead>
                 <TableHead>Equipo</TableHead>
-                <TableHead>Tipo</TableHead>
                 <TableHead>Condicion</TableHead>
+                <TableHead>Tipo</TableHead>
                 <TableHead>Estado</TableHead>
                 <TableHead>Fecha</TableHead>
                 <TableHead className="text-right">Acciones</TableHead>

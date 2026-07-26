@@ -50,7 +50,6 @@ function CardMedia({
           fit === 'contain' ? 'object-contain' : 'object-cover',
           imgClassName,
         )}
-        loading="lazy"
       />
     </div>
   )

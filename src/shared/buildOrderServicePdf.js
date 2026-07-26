@@ -3,12 +3,11 @@ import {
   SERVICE_CONDITION_LABELS,
   SERVICE_TYPE_LABELS,
 } from './orderConstants'
-import { ORDER_PDF_COMPANY } from './orderPdfConstants'
+import { ORDER_PDF_COMPANY, PDF_EMPTY_DATE } from './orderPdfConstants'
 
 const PAGE = { width: 612, height: 792 }
 const MARGIN_X = 28
 const MARGIN_Y = 18
-const CUT_GAP = 14
 
 const INK = rgb(0, 0, 0)
 const HEADER_FILL = rgb(0.72, 0.84, 0.93)
@@ -161,7 +160,12 @@ function normalizeParts(parts) {
   return normalized
 }
 
-function drawSlip(page, fonts, data, bounds, copyLabel) {
+function formatCcLine(documentNumber) {
+  const doc = String(documentNumber ?? '').trim()
+  return doc ? `C.C. No. ${doc}` : 'C.C. No.'
+}
+
+function drawSlip(page, fonts, data, bounds) {
   const { left, right, top, bottom } = bounds
   const width = right - left
   let cursor = top
@@ -196,7 +200,7 @@ function drawSlip(page, fonts, data, bounds, copyLabel) {
   drawText(page, `Nro. ${textOr(data.orderNumber, '')}`, metaX, cursor - 12, fonts.bold, 10)
   drawText(page, 'Doc Referencia', metaX, cursor - 24, fonts.bold, 8)
   drawText(page, textOr(data.documentNumber), metaX, cursor - 34, fonts.regular, 8)
-  drawText(page, `Fecha: ${textOr(data.date, 'YYYY/MM/DD')}`, metaX, cursor - 44, fonts.regular, 8)
+  drawText(page, `Fecha: ${textOr(data.date, PDF_EMPTY_DATE)}`, metaX, cursor - 44, fonts.regular, 8)
   drawText(page, ORDER_PDF_COMPANY.city, metaX, cursor - 54, fonts.bold, 7)
 
   cursor -= headerH + 4
@@ -213,19 +217,20 @@ function drawSlip(page, fonts, data, bounds, copyLabel) {
   )
   cursor -= 14
 
-  const clientH = 28
+  const clientMeta = [
+    textOr(data.clientName),
+    data.documentNumber ? `Doc: ${data.documentNumber}` : '',
+    data.clientPhone ? `Tel: ${data.clientPhone}` : '',
+    data.clientEmail ? `Email: ${data.clientEmail}` : '',
+    data.clientAddress ? `Dir: ${data.clientAddress}` : '',
+  ].filter(Boolean)
+  const clientH = clientMeta.length > 3 || data.clientAddress ? 36 : 28
   drawCell(page, fonts, {
     x: innerLeft,
     y: cursor - clientH,
     width: innerWidth,
     height: clientH,
-    value: [
-      textOr(data.clientName),
-      data.documentNumber ? `Doc: ${data.documentNumber}` : '',
-      data.clientPhone ? `Tel: ${data.clientPhone}` : '',
-    ]
-      .filter(Boolean)
-      .join('   '),
+    value: clientMeta.join('   '),
     valueSize: 8,
   })
   cursor -= clientH
@@ -244,7 +249,7 @@ function drawSlip(page, fonts, data, bounds, copyLabel) {
     const labelW = fonts.bold.widthOfTextAtSize(label, 7)
     drawText(
       page,
-      textOr(value, 'YYYY/MM/DD'),
+      textOr(value, PDF_EMPTY_DATE),
       x + 5 + labelW,
       cursor - 11,
       fonts.regular,
@@ -260,18 +265,19 @@ function drawSlip(page, fonts, data, bounds, copyLabel) {
   const headers = [
     'Equipo',
     'Marca',
-    'Servicio',
-    'C. General',
+    'Condición',
+    'Tipo',
     'Responsable',
     'Tipo Servicio',
   ]
+  // Condición -> serviceType options; Tipo / Tipo Servicio -> serviceCondition
   const values = [
     data.device,
     data.brand,
     serviceType,
     condition,
     data.technicianName,
-    serviceType,
+    condition,
   ]
 
   headers.forEach((label, index) => {
@@ -299,23 +305,13 @@ function drawSlip(page, fonts, data, bounds, copyLabel) {
   })
   cursor -= valH
 
-  // Symptom / model / serial
+  // Model / serial
   const midH = 28
-  const symptomW = innerWidth * 0.5
-  const modelW = innerWidth * 0.25
-  const serialW = innerWidth - symptomW - modelW
+  const modelW = innerWidth * 0.5
+  const serialW = innerWidth - modelW
 
   drawCell(page, fonts, {
     x: innerLeft,
-    y: cursor - midH,
-    width: symptomW,
-    height: midH,
-    label: 'Síntoma',
-    value: textOr(data.symptom),
-    valueSize: 7,
-  })
-  drawCell(page, fonts, {
-    x: innerLeft + symptomW,
     y: cursor - midH,
     width: modelW,
     height: midH,
@@ -324,7 +320,7 @@ function drawSlip(page, fonts, data, bounds, copyLabel) {
     valueSize: 7,
   })
   drawCell(page, fonts, {
-    x: innerLeft + symptomW + modelW,
+    x: innerLeft + modelW,
     y: cursor - midH,
     width: serialW,
     height: midH,
@@ -335,7 +331,7 @@ function drawSlip(page, fonts, data, bounds, copyLabel) {
   cursor -= midH
 
   // Diagnosis
-  const diagH = 32
+  const diagH = 40
   drawCell(page, fonts, {
     x: innerLeft,
     y: cursor - diagH,
@@ -398,16 +394,22 @@ function drawSlip(page, fonts, data, bounds, copyLabel) {
 
   // Signatures
   const signW = (innerWidth - 12) / 2
-  const signY = Math.max(bottom + 36, cursor - 40)
+  const signY = Math.max(bottom + 28, cursor - 40)
 
   ;[
     {
       title: 'Firma a conformidad del Cliente:',
-      lines: ['C.C. No.', 'Fecha: YYYY/MM/DD'],
+      lines: [
+        formatCcLine(data.documentNumber),
+        `Fecha: ${PDF_EMPTY_DATE}`,
+      ],
     },
     {
       title: 'Técnico:',
-      lines: ['C.C. No.', 'Fecha: YYYY/MM/DD'],
+      lines: [
+        formatCcLine(data.technicianDocumentNumber),
+        `Fecha: ${PDF_EMPTY_DATE}`,
+      ],
     },
   ].forEach((block, index) => {
     const x = innerLeft + index * (signW + 12)
@@ -418,7 +420,7 @@ function drawSlip(page, fonts, data, bounds, copyLabel) {
   })
 
   // Footer meta
-  const footerY = bottom + 16
+  const footerY = bottom + 10
   drawLine(page, innerLeft, footerY + 10, innerRight, footerY + 10, 0.5, RULE)
   drawText(
     page,
@@ -438,23 +440,13 @@ function drawSlip(page, fonts, data, bounds, copyLabel) {
     fonts.bold,
     6.5,
   )
-  const dateText = `Fecha: ${textOr(data.generatedAt, 'YYYY/MM/DD')}`
+  const dateText = `Fecha: ${textOr(data.generatedAt, PDF_EMPTY_DATE)}`
   const dateTextW = fonts.regular.widthOfTextAtSize(dateText, 6.5)
   drawText(page, dateText, innerRight - dateTextW, footerY, fonts.regular, 6.5)
-
-  const copyW = fonts.bold.widthOfTextAtSize(copyLabel, 9)
-  drawText(
-    page,
-    copyLabel,
-    innerLeft + (innerWidth - copyW) / 2,
-    bottom + 4,
-    fonts.bold,
-    9,
-  )
 }
 
 /**
- * Builds a Letter PDF with Cliente + Empresa slips in Excel-like cells.
+ * Builds a Letter PDF with a single service-order slip.
  * @returns {Promise<Uint8Array>}
  */
 export async function buildOrderServicePdfBytes(data) {
@@ -465,37 +457,12 @@ export async function buildOrderServicePdfBytes(data) {
     bold: await pdfDoc.embedFont(StandardFonts.HelveticaBold),
   }
 
-  const left = MARGIN_X
-  const right = PAGE.width - MARGIN_X
-  const top = PAGE.height - MARGIN_Y
-  const bottom = MARGIN_Y
-  const usable = top - bottom
-  const slipHeight = (usable - CUT_GAP) / 2
-
-  const slip1 = {
-    left,
-    right,
-    top,
-    bottom: top - slipHeight,
-  }
-  const slip2 = {
-    left,
-    right,
-    top: slip1.bottom - CUT_GAP,
-    bottom,
-  }
-
-  drawSlip(page, fonts, data, slip1, 'Cliente')
-
-  const cutY = slip1.bottom - CUT_GAP / 2
-  let x = left
-  while (x < right) {
-    const end = Math.min(x + 5, right)
-    drawLine(page, x, cutY, end, cutY, 0.55, RULE)
-    x = end + 3
-  }
-
-  drawSlip(page, fonts, data, slip2, 'Empresa')
+  drawSlip(page, fonts, data, {
+    left: MARGIN_X,
+    right: PAGE.width - MARGIN_X,
+    top: PAGE.height - MARGIN_Y,
+    bottom: MARGIN_Y,
+  })
 
   return pdfDoc.save()
 }
