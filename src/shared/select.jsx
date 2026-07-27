@@ -23,6 +23,7 @@ function AppSelect({
   position = 'popper',
   clearOnSelect = false,
   hideIndicator = false,
+  disabled = false,
 }) {
   const [isOpen, setIsOpen] = useState(false)
   const [resetKey, setResetKey] = useState(0)
@@ -40,13 +41,16 @@ function AppSelect({
   return (
     <Select
       key={clearOnSelect ? resetKey : undefined}
-      value={clearOnSelect ? undefined : value}
+      // Keep controlled for the component lifetime: never flip undefined <-> string.
+      value={clearOnSelect ? undefined : (value ?? '')}
       onValueChange={handleValueChange}
       onOpenChange={setIsOpen}
+      disabled={disabled}
     >
       <SelectTrigger
         className={cn(
           'h-auto w-full cursor-pointer rounded-2xl border-border bg-background px-4 py-3 text-foreground outline-none focus:border-primary focus:bg-surface focus:ring-4 focus:ring-primary/20 **:data-[slot=select-icon]:hidden',
+          disabled && 'cursor-not-allowed opacity-55',
           className,
         )}
       >

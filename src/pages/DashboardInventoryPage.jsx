@@ -6,21 +6,20 @@ import { TbTrashX, TbEdit } from 'react-icons/tb'
 import DashboardLayout from '../components/layout/DashboardLayout'
 import Loader from '../hooks/Loader'
 import appToast from '../hooks/appToast'
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardFooter,
-  CardHeader,
-  CardMedia,
-  CardTitle,
-} from '../shared/Card'
 import ConfirmActions from '../shared/ConfirmActions'
 import DashboardListSection from '../shared/DashboardListSection'
 import AppDialog from '../shared/dialog'
 import Pagination from '../shared/Pagination'
 import ProductImagePond from '../shared/ProductImagePond'
 import ProfileActionButton from '../shared/ProfileActionButton'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '../shared/table'
 import YesONo from '../shared/YesONo'
 import { useCachedData } from '../hooks/useCachedData'
 import { usePagination } from '../hooks/usePagination'
@@ -523,83 +522,8 @@ function DashboardInventoryPage() {
             </p>
           </div>
         ) : (
-          <>
-            <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-5">
-              {visibleProducts.map((product) => (
-                <Card key={product.id} className="rounded-xl">
-                  <CardMedia
-                    src={product.imageUrl}
-                    alt={product.name}
-                    fit="contain"
-                    className="aspect-square"
-                    imgClassName="p-1.5"
-                    fallback={<PiPackageFill className="size-6 opacity-35" />}
-                  />
-                  <CardHeader className="gap-0 px-2.5 pt-2">
-                    <CardTitle className="line-clamp-1 text-sm">
-                      {product.name}
-                    </CardTitle>
-                    {product.sku ? (
-                      <p className="truncate text-[9px] font-semibold uppercase tracking-wide text-foreground/45">
-                        {product.sku}
-                      </p>
-                    ) : null}
-                  </CardHeader>
-                  <CardContent className="gap-1.5 px-2.5 py-1.5">
-                    {product.description ? (
-                      <CardDescription className="line-clamp-1 text-[11px]">
-                        {product.description}
-                      </CardDescription>
-                    ) : (
-                      <CardDescription className="text-[11px]">
-                        Sin descripcion
-                      </CardDescription>
-                    )}
-                    <div className="mt-auto flex items-end justify-between gap-1.5">
-                      <div>
-                        <p className="text-[9px] font-semibold uppercase tracking-wide text-foreground/40">
-                          Stock
-                        </p>
-                        <p
-                          className={`text-sm font-bold ${stockTone(product.quantity)}`}
-                        >
-                          {product.quantity}
-                        </p>
-                      </div>
-                      <div className="min-w-0 text-right">
-                        <p className="text-[9px] font-semibold uppercase tracking-wide text-foreground/40">
-                          Precio
-                        </p>
-                        <p className="truncate text-sm font-bold text-foreground">
-                          {currencyFormatter.format(product.unitPrice || 0)}
-                        </p>
-                      </div>
-                    </div>
-                  </CardContent>
-                  <CardFooter className="gap-1 px-2 py-1.5">
-                    <ProfileActionButton
-                      icon={TbEdit}
-                      label="Editar producto"
-                      tooltip="Editar producto"
-                      className="size-7"
-                      disabled={isSubmitting}
-                      onClick={() => openEditDialog(product)}
-                    />
-                    <ProfileActionButton
-                      icon={TbTrashX}
-                      label="Eliminar producto"
-                      tooltip="Eliminar producto"
-                      tone="red"
-                      className="size-7"
-                      disabled={isSubmitting}
-                      onClick={() => openDeleteDialog(product)}
-                    />
-                  </CardFooter>
-                </Card>
-              ))}
-            </div>
-
-            <div className="mt-6">
+          <Table
+            footer={
               <Pagination
                 page={page}
                 totalPages={totalPages}
@@ -607,8 +531,75 @@ function DashboardInventoryPage() {
                 pageSize={pageSize}
                 onPageSizeChange={setPageSize}
               />
-            </div>
-          </>
+            }
+          >
+            <TableHeader>
+              <TableRow className="hover:bg-background">
+                <TableHead className="w-20">Imagen</TableHead>
+                <TableHead>Producto</TableHead>
+                <TableHead>SKU</TableHead>
+                <TableHead>Stock</TableHead>
+                <TableHead>Precio</TableHead>
+                <TableHead className="text-right">Acciones</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {visibleProducts.map((product) => (
+                <TableRow key={product.id}>
+                  <TableCell>
+                    <div className="flex size-14 items-center justify-center overflow-hidden rounded-xl bg-background ring-1 ring-border">
+                      {product.imageUrl ? (
+                        <img
+                          src={product.imageUrl}
+                          alt={product.name}
+                          className="size-full object-contain p-1"
+                        />
+                      ) : (
+                        <PiPackageFill className="size-6 text-foreground/30" />
+                      )}
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    <p className="font-bold text-foreground">{product.name}</p>
+                  </TableCell>
+                  <TableCell>
+                    <p className="text-sm font-semibold uppercase tracking-wide text-foreground/70">
+                      {product.sku || '—'}
+                    </p>
+                  </TableCell>
+                  <TableCell>
+                    <p className={`font-bold ${stockTone(product.quantity)}`}>
+                      {product.quantity}
+                    </p>
+                  </TableCell>
+                  <TableCell>
+                    <p className="font-bold text-foreground">
+                      {currencyFormatter.format(product.unitPrice || 0)}
+                    </p>
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex flex-wrap items-center justify-end gap-2">
+                      <ProfileActionButton
+                        icon={TbEdit}
+                        label="Editar producto"
+                        tooltip="Editar producto"
+                        disabled={isSubmitting}
+                        onClick={() => openEditDialog(product)}
+                      />
+                      <ProfileActionButton
+                        icon={TbTrashX}
+                        label="Eliminar producto"
+                        tooltip="Eliminar producto"
+                        tone="red"
+                        disabled={isSubmitting}
+                        onClick={() => openDeleteDialog(product)}
+                      />
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
         )}
       </DashboardListSection>
     </DashboardLayout>

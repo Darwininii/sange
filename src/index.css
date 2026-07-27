@@ -41,6 +41,18 @@ textarea {
   font: inherit;
 }
 
+/* Hide number input steppers (Chrome/Safari/Edge + Firefox). */
+input[type='number'].no-spinner {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+
+input[type='number'].no-spinner::-webkit-outer-spin-button,
+input[type='number'].no-spinner::-webkit-inner-spin-button {
+  margin: 0;
+  -webkit-appearance: none;
+}
+
 button,
 a {
   cursor: pointer;

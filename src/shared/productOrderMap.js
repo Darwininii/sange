@@ -6,7 +6,6 @@ export function createEmptyPartRow() {
     quantity: '',
     part: '',
     description: '',
-    delivery: '',
     productId: '',
     stock: null,
   }
@@ -97,11 +96,34 @@ export function getAvailableStockForProduct(product, reservedUsage = {}) {
   return stock + (Number.isFinite(reserved) && reserved > 0 ? reserved : 0)
 }
 
+export function getPartQuantityWarning(row) {
+  const raw = String(row?.quantity ?? '').trim()
+  const hasProduct =
+    String(row?.productId ?? '').trim() !== '' ||
+    String(row?.part ?? '').trim() !== ''
+
+  if (!hasProduct || raw === '') {
+    return null
+  }
+
+  const quantity = Number(raw)
+  if (!Number.isFinite(quantity) || quantity <= 0) {
+    return 'Cantidad no valida'
+  }
+
+  return null
+}
+
 export function getPartStockWarning(
   row,
   products = [],
   { reservedUsage = {}, parts = null } = {},
 ) {
+  const quantityWarning = getPartQuantityWarning(row)
+  if (quantityWarning) {
+    return quantityWarning
+  }
+
   const product = row?.productId
     ? products.find((item) => item.id === row.productId)
     : null

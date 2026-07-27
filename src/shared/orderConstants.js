@@ -8,6 +8,7 @@ export const SERVICE_CONDITION_OPTIONS = [
   { value: 'warranty', label: 'Garantia' },
   { value: 'billed', label: 'Facturado' },
   { value: 'installation', label: 'Instalacion' },
+  { value: 'sales', label: 'Ventas' },
 ]
 
 export const SERVICE_TYPE_LABELS = Object.fromEntries(
@@ -28,4 +29,5 @@ export const SERVICE_CONDITION_COLORS = {
   warranty: 'green',
   billed: 'amber',
   installation: 'blue',
+  sales: 'violet',
 }

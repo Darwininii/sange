@@ -1,5 +1,9 @@
 import { isSupabaseConfigured, supabase } from '../lib/supabaseClient'
 import {
+  createEmptyAbonos,
+  normalizeAbonoRows,
+} from '../shared/orderAbonos'
+import {
   createEmptyParts,
   normalizePartRows,
 } from '../shared/orderPdfConstants'
@@ -31,14 +35,23 @@ export const INITIAL_ORDER_VALUES = {
   symptom: '',
   diagnosis: '',
   parts: createEmptyParts(1),
+  abonos: createEmptyAbonos(1),
 }
 
 const ORDER_SELECT =
-  'id, order_number, client_name, client_phone, client_email, client_address, device, brand, model, serial_number, service_type, service_condition, assigned_technician_id, issue, service_cost, previous_service_notes, document_number, external_order_number, delivery_date, repair_date, purchase_date, symptom, diagnosis, parts, status, created_by, created_at, updated_at'
+  'id, order_number, client_name, client_phone, client_email, client_address, device, brand, model, serial_number, service_type, service_condition, assigned_technician_id, issue, service_cost, previous_service_notes, document_number, external_order_number, delivery_date, repair_date, purchase_date, symptom, diagnosis, parts, abonos, status, created_by, created_at, updated_at'
 
 function normalizeParts(parts) {
   const normalized = normalizePartRows(parts, { minRows: 1 })
   return normalized.length > 0 ? normalized : createEmptyParts(1)
+}
+
+function normalizeAbonos(abonos, { stampMissingDates = false } = {}) {
+  const normalized = normalizeAbonoRows(abonos, {
+    minRows: 1,
+    stampMissingDates,
+  })
+  return normalized.length > 0 ? normalized : createEmptyAbonos(1)
 }
 
 function toDateInputValue(value) {
@@ -86,6 +99,7 @@ export function getOrderFormValues(order) {
     symptom: order?.symptom ?? '',
     diagnosis: order?.diagnosis ?? '',
     parts: normalizeParts(order?.parts),
+    abonos: normalizeAbonos(order?.abonos),
   }
 }
 
@@ -128,6 +142,7 @@ function mapOrder(row) {
     symptom: row.symptom ?? '',
     diagnosis: row.diagnosis ?? '',
     parts: normalizeParts(row.parts),
+    abonos: normalizeAbonos(row.abonos),
     status: row.status ?? 'pending',
     createdBy: row.created_by ?? null,
     createdAt: row.created_at ?? null,
@@ -168,8 +183,8 @@ function toDbPayload(orderData) {
     repair_date: toDbDate(orderData.repairDate),
     purchase_date: toDbDate(orderData.purchaseDate),
     symptom: orderData.symptom ?? '',
-    diagnosis: orderData.diagnosis ?? '',
     parts: normalizeParts(orderData.parts),
+    abonos: normalizeAbonos(orderData.abonos, { stampMissingDates: true }),
   }
 }
 
@@ -306,6 +321,75 @@ export async function updateOrder(orderId, orderData) {
       technicianId: nextTechnicianId,
       previousTechnicianId,
       assigned,
+    },
+  })
+
+  return updated
+}
+
+/**
+ * Updates only the diagnosis field (used by the assigned technician).
+ */
+export async function updateOrderDiagnosis(orderId, diagnosis) {
+  const client = requireSupabase()
+  const orderNumber = parseOrderNumber(orderId)
+
+  if (orderNumber === null) {
+    throw new Error('Numero de orden invalido.')
+  }
+
+  const {
+    data: { user: authUser },
+    error: authError,
+  } = await client.auth.getUser()
+
+  if (authError || !authUser?.id) {
+    throw new Error('No hay sesion activa para actualizar el diagnostico.')
+  }
+
+  const { data: existing, error: existingError } = await client
+    .from('orders')
+    .select('id, order_number, assigned_technician_id, client_name')
+    .eq('order_number', orderNumber)
+    .maybeSingle()
+
+  if (existingError) {
+    throw mapOrderWriteError(existingError, 'No se pudo actualizar el diagnostico')
+  }
+
+  if (!existing) {
+    throw new Error('No se encontro la orden para actualizar.')
+  }
+
+  if (existing.assigned_technician_id !== authUser.id) {
+    throw new Error('Solo el tecnico asignado puede actualizar el diagnostico.')
+  }
+
+  const { data, error } = await client
+    .from('orders')
+    .update({ diagnosis: String(diagnosis ?? '').trim() })
+    .eq('order_number', orderNumber)
+    .select(ORDER_SELECT)
+    .maybeSingle()
+
+  if (error) {
+    throw mapOrderWriteError(error, 'No se pudo actualizar el diagnostico')
+  }
+
+  if (!data) {
+    throw new Error('No se encontro la orden para actualizar.')
+  }
+
+  const updated = mapOrder(data)
+
+  await registerActivitySafe({
+    action: activityActions.order_update,
+    metadata: {
+      orderId: updated.id,
+      orderNumber: updated.orderNumber,
+      clientName: updated.clientName,
+      technicianId: updated.technicianId ?? '',
+      diagnosisUpdated: true,
     },
   })
 
@@ -477,5 +561,45 @@ export function subscribeOrderMessages(orderUuid, onMessage) {
 
   return () => {
     client.removeChannel(channel)
+  }
+}
+
+/**
+ * Live diagnosis updates for an open order form (technician save → staff view).
+ * @param {string} orderUuid
+ * @param {(diagnosis: string) => void} onDiagnosisChange
+ * @returns {() => void}
+ */
+export function subscribeOrderDiagnosisChanges(orderUuid, onDiagnosisChange) {
+  if (!isSupabaseConfigured || !supabase || !orderUuid) {
+    return () => {}
+  }
+
+  if (typeof onDiagnosisChange !== 'function') {
+    return () => {}
+  }
+
+  const channel = supabase
+    .channel(`order-diagnosis:${orderUuid}`)
+    .on(
+      'postgres_changes',
+      {
+        event: 'UPDATE',
+        schema: 'public',
+        table: 'orders',
+        filter: `id=eq.${orderUuid}`,
+      },
+      (payload) => {
+        if (!Object.prototype.hasOwnProperty.call(payload.new ?? {}, 'diagnosis')) {
+          return
+        }
+
+        onDiagnosisChange(String(payload.new.diagnosis ?? ''))
+      },
+    )
+    .subscribe()
+
+  return () => {
+    supabase.removeChannel(channel)
   }
 }

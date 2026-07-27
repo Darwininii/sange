@@ -2,6 +2,7 @@ import { lazy, Suspense, useEffect, useMemo, useState } from 'react'
 import { useNavigate } from '@tanstack/react-router'
 import { FaFilePdf } from 'react-icons/fa6'
 import { IoAddCircle } from 'react-icons/io5'
+import { TiUserAdd } from 'react-icons/ti'
 import { TbTrashX } from 'react-icons/tb'
 import DashboardLayout from '../components/layout/DashboardLayout'
 import Loader from '../hooks/Loader'
@@ -15,8 +16,20 @@ import ConfirmActions from './ConfirmActions'
 import ProductLookupInput from './ProductLookupInput'
 import {
   applyClientToOrderForm,
+  canQuickAddClientFromOrder,
   CLIENT_SEARCH_KEYS,
+  getClientPayloadFromOrderForm,
+  shouldAutoCreateClientFromOrder,
 } from './clientOrderMap'
+import {
+  BANK_OPTIONS,
+  createEmptyAbonoRow,
+  createEmptyAbonos,
+  formatAbonoDateTime,
+  normalizeAbonoRows,
+  PAYMENT_TYPE_OPTIONS,
+  recalculateAbonoChain,
+} from './orderAbonos'
 import { buildOrderPdfData, PDF_PARTS_MAX_ROWS } from './orderPdfConstants'
 
 const DatePicker = lazy(() => import('./DatePicker'))
@@ -39,11 +52,12 @@ import {
 import {
   applyProductToPartRow,
   createEmptyPartRow,
+  getPartQuantityWarning,
   getPartStockWarning,
   getProductUsageFromParts,
   sanitizePartsAgainstProducts,
 } from './productOrderMap'
-import { getClients } from '../services/clientService'
+import { getClients, createClient } from '../services/clientService'
 import {
   getInventoryProducts,
   subscribeInventoryProductsChanges,
@@ -54,6 +68,7 @@ import {
   getOrderByNumber,
   getOrderFormValues,
   getTechnicians,
+  subscribeOrderDiagnosisChanges,
   updateOrder,
 } from '../services/orderService'
 import { useAuthStore } from '../store/authStore'
@@ -62,6 +77,8 @@ import { signOutUser } from '../utils/auth'
 
 const FIELD_CLASS =
   'w-full rounded-2xl border border-border bg-background px-4 py-3 outline-none focus:border-primary focus:bg-white dark:focus:bg-transparent/10 focus:ring-4 focus:ring-primary/20'
+
+const NUMBER_FIELD_CLASS = `${FIELD_CLASS} no-spinner`
 
 function FieldLabel({ children, required = false }) {
   return (
@@ -106,14 +123,16 @@ function OrderFormView({ mode = 'create', orderId = null }) {
   const [technicianOptions, setTechnicianOptions] = useState([])
   const [isLoadingOrder, setIsLoadingOrder] = useState(mode === 'edit')
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [isQuickAddingClient, setIsQuickAddingClient] = useState(false)
   const [isPdfOpen, setIsPdfOpen] = useState(false)
-  const [isChatReady, setIsChatReady] = useState(false)
+  const [isChatDeferred, setIsChatDeferred] = useState(false)
   const config = modeConfig[mode] ?? modeConfig.create
   const isWarranty = form.serviceCondition === 'warranty'
   const isBilled = form.serviceCondition === 'billed'
   const userId = user?.id
+  const isChatReady = !isLoadingOrder && isChatDeferred
 
-  const { data: clientsData } = useCachedData({
+  const { data: clientsData, refetch: refetchClients } = useCachedData({
     cacheKey: 'clients',
     fetcher: getClients,
     enabled: Boolean(userId),
@@ -121,6 +140,11 @@ function OrderFormView({ mode = 'create', orderId = null }) {
   const clients = useMemo(
     () => (Array.isArray(clientsData) ? clientsData : EMPTY_LIST),
     [clientsData],
+  )
+
+  const canQuickAddClient = useMemo(
+    () => canQuickAddClientFromOrder(form, clients),
+    [clients, form],
   )
 
   const { data: productsData } = useCachedData({
@@ -178,17 +202,16 @@ function OrderFormView({ mode = 'create', orderId = null }) {
   // Mount TipTap chat after the form paints to keep navigation clicks responsive.
   useEffect(() => {
     if (isLoadingOrder) {
-      setIsChatReady(false)
       return undefined
     }
 
     let timeoutId
     const idleId = window.requestIdleCallback
-      ? window.requestIdleCallback(() => setIsChatReady(true), { timeout: 400 })
+      ? window.requestIdleCallback(() => setIsChatDeferred(true), { timeout: 400 })
       : null
 
     if (idleId == null) {
-      timeoutId = window.setTimeout(() => setIsChatReady(true), 120)
+      timeoutId = window.setTimeout(() => setIsChatDeferred(true), 120)
     }
 
     return () => {
@@ -232,7 +255,10 @@ function OrderFormView({ mode = 'create', orderId = null }) {
 
     async function loadOrder() {
       if (mode !== 'edit') {
-        setForm(INITIAL_ORDER_VALUES)
+        setForm({
+          ...INITIAL_ORDER_VALUES,
+          abonos: createEmptyAbonos(1),
+        })
         setOrderUuid(null)
         setReservedPartsUsage({})
         setIsLoadingOrder(false)
@@ -279,6 +305,23 @@ function OrderFormView({ mode = 'create', orderId = null }) {
     }
   }, [mode, orderId, navigate])
 
+  // Keep diagnosis in sync when the assigned technician saves from another session/tab.
+  useEffect(() => {
+    if (mode !== 'edit' || !orderUuid) {
+      return undefined
+    }
+
+    return subscribeOrderDiagnosisChanges(orderUuid, (diagnosis) => {
+      setForm((currentForm) => {
+        if (currentForm.diagnosis === diagnosis) {
+          return currentForm
+        }
+
+        return { ...currentForm, diagnosis }
+      })
+    })
+  }, [mode, orderUuid])
+
   async function handleLogout() {
     await signOutUser()
     logout()
@@ -292,6 +335,42 @@ function OrderFormView({ mode = 'create', orderId = null }) {
 
   function handleSelectClient(client) {
     setForm((currentForm) => applyClientToOrderForm(currentForm, client))
+  }
+
+  async function handleQuickAddClient() {
+    if (!canQuickAddClientFromOrder(form, clients)) {
+      appToast.warning(
+        'Completa nombre, cedula, telefono, correo y direccion con datos que no existan en clientes.',
+      )
+      return
+    }
+
+    const payload = getClientPayloadFromOrderForm(form)
+
+    setIsQuickAddingClient(true)
+
+    try {
+      const created = await appToast.promise(
+        createClient(payload, { createdBy: user?.id }),
+        {
+          loading: 'Agregando cliente...',
+          success: 'Cliente agregado correctamente.',
+          error: (error) =>
+            getErrorMessage(error, 'No se pudo agregar el cliente.'),
+        },
+      )
+
+      if (user?.id) {
+        invalidateUserCache(user.id, 'clients')
+      }
+
+      await refetchClients({ silent: true, force: true })
+      setForm((currentForm) => applyClientToOrderForm(currentForm, created))
+    } catch {
+      // Toast already shown by appToast.promise
+    } finally {
+      setIsQuickAddingClient(false)
+    }
   }
 
   function handlePartChange(index, field, value) {
@@ -347,6 +426,67 @@ function OrderFormView({ mode = 'create', orderId = null }) {
     })
   }
 
+  function handleAbonoChange(index, field, value) {
+    setForm((currentForm) => {
+      const abonos = [...(currentForm.abonos || [])]
+      const currentRow = abonos[index] || createEmptyAbonoRow()
+      const nextRow = { ...currentRow, [field]: value }
+
+      if (field === 'paymentType' && value !== 'bank') {
+        nextRow.bank = ''
+        nextRow.bankOther = ''
+      }
+
+      if (field === 'bank' && value !== 'otro') {
+        nextRow.bankOther = ''
+      }
+
+      abonos[index] = nextRow
+      return {
+        ...currentForm,
+        abonos: recalculateAbonoChain(abonos),
+      }
+    })
+  }
+
+  function handleAddAbonoRow() {
+    setForm((currentForm) => {
+      const abonos = [...(currentForm.abonos || [])]
+      const previous = abonos[abonos.length - 1]
+      const previousBalance = String(previous?.balance ?? '').trim()
+      const nextTotal =
+        previousBalance !== '' && Number.isFinite(Number(previousBalance))
+          ? previousBalance
+          : '0'
+
+      return {
+        ...currentForm,
+        abonos: recalculateAbonoChain([
+          ...abonos,
+          createEmptyAbonoRow({ totalPrice: nextTotal }),
+        ]),
+      }
+    })
+  }
+
+  function handleRemoveAbonoRow(index) {
+    setForm((currentForm) => {
+      const abonos = [...(currentForm.abonos || [])]
+      if (abonos.length <= 1) {
+        return {
+          ...currentForm,
+          abonos: recalculateAbonoChain([createEmptyAbonoRow()]),
+        }
+      }
+
+      abonos.splice(index, 1)
+      return {
+        ...currentForm,
+        abonos: recalculateAbonoChain(abonos),
+      }
+    })
+  }
+
   function handleCancel() {
     navigate({ to: '/dashboard/orders' })
   }
@@ -358,11 +498,10 @@ function OrderFormView({ mode = 'create', orderId = null }) {
       !form.clientName.trim() ||
       !form.device.trim() ||
       !form.serviceType ||
-      !form.serviceCondition ||
-      !form.issue.trim()
+      !form.serviceCondition
     ) {
       appToast.warning(
-        'Cliente, equipo, condicion, tipo de servicio y motivo son obligatorios.',
+        'Cliente, equipo, condicion y tipo de servicio son obligatorios.',
       )
       return
     }
@@ -376,6 +515,17 @@ function OrderFormView({ mode = 'create', orderId = null }) {
     const stockOptions = {
       reservedUsage: reservedPartsUsage,
       parts: sanitizedParts,
+    }
+
+    const invalidQuantity = sanitizedParts.find(
+      (row) => getPartQuantityWarning(row) === 'Cantidad no valida',
+    )
+
+    if (invalidQuantity) {
+      appToast.warning(
+        `Cantidad no valida en "${invalidQuantity.part || 'repuesto'}". Debe ser mayor a 0.`,
+      )
+      return
     }
 
     const stockBlock = sanitizedParts.find(
@@ -403,7 +553,7 @@ function OrderFormView({ mode = 'create', orderId = null }) {
       serviceType: form.serviceType,
       serviceCondition: form.serviceCondition,
       technicianId: form.technicianId,
-      issue: form.issue.trim(),
+      issue: '',
       serviceCost: form.serviceCost,
       previousServiceNotes: form.previousServiceNotes.trim(),
       documentNumber: form.documentNumber.trim(),
@@ -412,13 +562,42 @@ function OrderFormView({ mode = 'create', orderId = null }) {
       repairDate: form.repairDate,
       purchaseDate: form.purchaseDate,
       symptom: '',
-      diagnosis: form.diagnosis.trim(),
       parts: sanitizedParts,
+      abonos: normalizeAbonoRows(form.abonos, {
+        minRows: 1,
+        stampMissingDates: true,
+      }),
     }
 
     setIsSubmitting(true)
 
     try {
+      if (shouldAutoCreateClientFromOrder(form, clients)) {
+        try {
+          await createClient(getClientPayloadFromOrderForm(form), {
+            createdBy: user?.id,
+          })
+
+          if (user?.id) {
+            invalidateUserCache(user.id, 'clients')
+          }
+
+          await refetchClients({ silent: true, force: true })
+        } catch (clientError) {
+          const message = String(clientError?.message ?? '')
+          // Another session may have created the same client; continue with the order.
+          if (!message.includes('Ya existe un cliente')) {
+            appToast.danger(
+              getErrorMessage(
+                clientError,
+                'No se pudo registrar el cliente automaticamente.',
+              ),
+            )
+            throw clientError
+          }
+        }
+      }
+
       if (mode === 'edit') {
         await appToast.promise(updateOrder(orderId, payload), {
           loading: 'Actualizando orden...',
@@ -439,6 +618,7 @@ function OrderFormView({ mode = 'create', orderId = null }) {
       if (user?.id) {
         invalidateUserCache(user.id, 'orders')
         invalidateUserCache(user.id, 'inventory-products')
+        invalidateUserCache(user.id, 'clients')
       }
 
       navigate({ to: '/dashboard/orders' })
@@ -449,6 +629,13 @@ function OrderFormView({ mode = 'create', orderId = null }) {
         String(error?.message ?? '').includes('Stock insuficiente')
       ) {
         invalidateUserCache(user.id, 'inventory-products')
+      }
+
+      if (
+        user?.id &&
+        String(error?.message ?? '').includes('cliente')
+      ) {
+        invalidateUserCache(user.id, 'clients')
       }
     } finally {
       setIsSubmitting(false)
@@ -513,6 +700,7 @@ function OrderFormView({ mode = 'create', orderId = null }) {
           </div>
         ) : (
           <div className="mt-6 grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(280px,380px)]">
+            <div className="space-y-6">
             <form
               className="rounded-4xl bg-surface p-6 shadow-sm ring-1 ring-border"
               onSubmit={handleSubmit}
@@ -573,30 +761,16 @@ function OrderFormView({ mode = 'create', orderId = null }) {
                   onSelectClient={handleSelectClient}
                 />
 
-                <div className="grid gap-4">
-                  <label>
-                    <FieldLabel>Telefono</FieldLabel>
-                    <input
-                      className={FIELD_CLASS}
-                      name="clientPhone"
-                      value={form.clientPhone}
-                      placeholder="Numero de contacto"
-                      onChange={handleChange}
-                    />
-                  </label>
-
-                  <label>
-                    <FieldLabel>Correo</FieldLabel>
-                    <input
-                      className={FIELD_CLASS}
-                      name="clientEmail"
-                      type="email"
-                      value={form.clientEmail}
-                      placeholder="Correo del cliente"
-                      onChange={handleChange}
-                    />
-                  </label>
-                </div>
+                <label>
+                  <FieldLabel>Telefono</FieldLabel>
+                  <input
+                    className={FIELD_CLASS}
+                    name="clientPhone"
+                    value={form.clientPhone}
+                    placeholder="Numero de contacto"
+                    onChange={handleChange}
+                  />
+                </label>
 
                 <label>
                   <FieldLabel>Direccion</FieldLabel>
@@ -608,6 +782,49 @@ function OrderFormView({ mode = 'create', orderId = null }) {
                     onChange={handleChange}
                   />
                 </label>
+
+                <label>
+                  <FieldLabel>Correo</FieldLabel>
+                  <input
+                    className={FIELD_CLASS}
+                    name="clientEmail"
+                    type="email"
+                    value={form.clientEmail}
+                    placeholder="Correo del cliente"
+                    onChange={handleChange}
+                  />
+                </label>
+
+                <div className="flex flex-col justify-end">
+                  <span className="mb-1 hidden text-sm font-bold sm:block sm:invisible">
+                    &nbsp;
+                  </span>
+                  <AppButton
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    leftIcon={TiUserAdd}
+                    className={`h-12.5 w-full rounded-2xl border-dashed ${
+                      canQuickAddClient
+                        ? ''
+                        : 'border-border/50 text-foreground/35'
+                    }`}
+                    isLoading={isQuickAddingClient}
+                    disabled={
+                      !canQuickAddClient ||
+                      isQuickAddingClient ||
+                      isSubmitting
+                    }
+                    tooltip={
+                      canQuickAddClient
+                        ? 'Agregar cliente a la base de datos'
+                        : 'Completa los datos de un cliente nuevo para activar'
+                    }
+                    onClick={handleQuickAddClient}
+                  >
+                    Guardar cliente
+                  </AppButton>
+                </div>
 
                 <label>
                   <FieldLabel required>Equipo</FieldLabel>
@@ -683,18 +900,6 @@ function OrderFormView({ mode = 'create', orderId = null }) {
                   />
                 </div>
 
-                <label>
-                  <FieldLabel required>Motivo del servicio</FieldLabel>
-                  <input
-                    className={FIELD_CLASS}
-                    name="issue"
-                    value={form.issue}
-                    placeholder="Diagnostico, revision, instalacion, etc."
-                    onChange={handleChange}
-                    required
-                  />
-                </label>
-
                 <Suspense fallback={dateFallback}>
                   <DatePicker
                     label="Fecha de entrega"
@@ -740,12 +945,17 @@ function OrderFormView({ mode = 'create', orderId = null }) {
                 <label className="md:col-span-2">
                   <FieldLabel>Diagnostico</FieldLabel>
                   <textarea
-                    className={`${FIELD_CLASS} min-h-28 resize-y`}
+                    className={`${FIELD_CLASS} min-h-28 resize-y cursor-default bg-foreground/5 text-foreground/80`}
                     name="diagnosis"
                     value={form.diagnosis}
-                    placeholder="Diagnostico tecnico"
-                    onChange={handleChange}
+                    placeholder="El tecnico asignado completa el diagnostico"
+                    readOnly
+                    tabIndex={0}
                   />
+                  <p className="mt-1.5 text-xs text-foreground/50">
+                    Solo el tecnico asignado puede editar el diagnostico desde la
+                    vista de la orden.
+                  </p>
                 </label>
 
                 {isBilled ? (
@@ -780,7 +990,7 @@ function OrderFormView({ mode = 'create', orderId = null }) {
 
                 <div className="md:col-span-2">
                   <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
-                    <FieldLabel>Repuestos / Delivery</FieldLabel>
+                    <FieldLabel>Repuestos</FieldLabel>
                     <AppButton
                       type="button"
                       size="sm"
@@ -792,7 +1002,7 @@ function OrderFormView({ mode = 'create', orderId = null }) {
                       Anadir repuesto
                     </AppButton>
                   </div>
-                  <div className="mt-1 space-y-3 rounded-2xl border border-border p-3">
+                  <div className="mt-1 space-y-3">
                     {(form.parts || []).map((row, index) => {
                       const stockWarning = getPartStockWarning(row, products, {
                         reservedUsage: reservedPartsUsage,
@@ -804,7 +1014,7 @@ function OrderFormView({ mode = 'create', orderId = null }) {
                           key={`part-row-${index}`}
                           className="space-y-1.5 rounded-xl bg-background/60 p-2 ring-1 ring-border/60"
                         >
-                          <div className="grid gap-2 md:grid-cols-[minmax(0,1.4fr)_minmax(0,0.7fr)_minmax(0,1.2fr)_minmax(0,0.8fr)_auto]">
+                          <div className="grid gap-2 md:grid-cols-[minmax(0,1.4fr)_minmax(0,0.7fr)_minmax(0,1.4fr)_auto]">
                             <ProductLookupInput
                               value={row.part}
                               placeholder="Parte / Producto"
@@ -817,7 +1027,7 @@ function OrderFormView({ mode = 'create', orderId = null }) {
                               }
                             />
                             <input
-                              className={FIELD_CLASS}
+                              className={NUMBER_FIELD_CLASS}
                               value={row.quantity}
                               placeholder="Cantidad"
                               type="number"
@@ -843,18 +1053,6 @@ function OrderFormView({ mode = 'create', orderId = null }) {
                                 )
                               }
                             />
-                            <input
-                              className={FIELD_CLASS}
-                              value={row.delivery}
-                              placeholder="Delivery"
-                              onChange={(event) =>
-                                handlePartChange(
-                                  index,
-                                  'delivery',
-                                  event.target.value,
-                                )
-                              }
-                            />
                             <AppButton
                               type="button"
                               size="icon"
@@ -867,7 +1065,13 @@ function OrderFormView({ mode = 'create', orderId = null }) {
                             />
                           </div>
                           {stockWarning ? (
-                            <p className="px-1 text-xs font-semibold text-amber-700 dark:text-amber-300">
+                            <p
+                              className={`px-1 text-xs font-semibold ${
+                                stockWarning === 'Cantidad no valida'
+                                  ? 'text-red-600 dark:text-red-400'
+                                  : 'text-amber-700 dark:text-amber-300'
+                              }`}
+                            >
                               {stockWarning}
                             </p>
                           ) : null}
@@ -878,6 +1082,143 @@ function OrderFormView({ mode = 'create', orderId = null }) {
                 </div>
               </div>
             </form>
+
+            <section className="rounded-4xl bg-surface p-6 shadow-sm ring-1 ring-border">
+              <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
+                <FieldLabel>Abonos</FieldLabel>
+                <AppButton
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  leftIcon={IoAddCircle}
+                  className="rounded-xl px-3 py-1.5 text-xs font-semibold"
+                  onClick={handleAddAbonoRow}
+                >
+                  Anadir abono
+                </AppButton>
+              </div>
+              <div className="mt-1 space-y-3">
+                {(form.abonos || []).map((row, index) => {
+                  const isBankPayment = row.paymentType === 'bank'
+                  const isOtherBank = isBankPayment && row.bank === 'otro'
+                  const showRegisteredAt =
+                    mode === 'edit' && Boolean(String(row.registeredAt ?? '').trim())
+
+                  return (
+                    <div
+                      key={`abono-row-${index}-${row.registeredAt || index}`}
+                      className="space-y-1.5 rounded-xl bg-background/60 p-2 ring-1 ring-border/60"
+                    >
+                      <div className="grid gap-2 md:grid-cols-[minmax(0,0.9fr)_minmax(0,0.9fr)_minmax(0,0.9fr)_minmax(0,1fr)_minmax(0,1.1fr)_auto]">
+                        <input
+                          className={
+                            index > 0
+                              ? `${NUMBER_FIELD_CLASS} cursor-default bg-foreground/5 text-foreground/80`
+                              : NUMBER_FIELD_CLASS
+                          }
+                          value={row.totalPrice}
+                          placeholder="Precio total"
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          readOnly={index > 0}
+                          tabIndex={index > 0 ? -1 : undefined}
+                          onChange={(event) =>
+                            handleAbonoChange(
+                              index,
+                              'totalPrice',
+                              event.target.value,
+                            )
+                          }
+                        />
+                        <input
+                          className={NUMBER_FIELD_CLASS}
+                          value={row.amount}
+                          placeholder="Abono"
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          onChange={(event) =>
+                            handleAbonoChange(index, 'amount', event.target.value)
+                          }
+                        />
+                        <input
+                          className={`${FIELD_CLASS} cursor-default bg-foreground/5 text-foreground/80`}
+                          value={row.balance}
+                          placeholder="Saldo"
+                          type="text"
+                          readOnly
+                          tabIndex={0}
+                          aria-label="Saldo"
+                        />
+                        <AppSelect
+                          value={row.paymentType || 'none'}
+                          options={[
+                            { value: 'none', label: 'Tipo de pago' },
+                            ...PAYMENT_TYPE_OPTIONS,
+                          ]}
+                          placeholder="Tipo de pago"
+                          onValueChange={(paymentType) =>
+                            handleAbonoChange(
+                              index,
+                              'paymentType',
+                              paymentType === 'none' ? '' : paymentType,
+                            )
+                          }
+                        />
+                        <AppSelect
+                          value={row.bank || 'none'}
+                          options={[
+                            { value: 'none', label: 'Seleccionar banco' },
+                            ...BANK_OPTIONS,
+                          ]}
+                          placeholder="Seleccionar banco"
+                          disabled={!isBankPayment}
+                          onValueChange={(bank) =>
+                            handleAbonoChange(
+                              index,
+                              'bank',
+                              bank === 'none' ? '' : bank,
+                            )
+                          }
+                        />
+                        <AppButton
+                          type="button"
+                          size="icon"
+                          variant="outline"
+                          icon={TbTrashX}
+                          className="size-11 shrink-0 rounded-2xl text-red-500"
+                          tooltip="Quitar abono"
+                          aria-label="Quitar fila de abono"
+                          onClick={() => handleRemoveAbonoRow(index)}
+                        />
+                      </div>
+                      {isOtherBank ? (
+                        <input
+                          className={FIELD_CLASS}
+                          value={row.bankOther ?? ''}
+                          placeholder="Escribe el nombre del banco"
+                          type="text"
+                          onChange={(event) =>
+                            handleAbonoChange(
+                              index,
+                              'bankOther',
+                              event.target.value,
+                            )
+                          }
+                        />
+                      ) : null}
+                      {showRegisteredAt ? (
+                        <p className="px-1 text-xs text-foreground/55">
+                          Registrado: {formatAbonoDateTime(row.registeredAt)}
+                        </p>
+                      ) : null}
+                    </div>
+                  )
+                })}
+              </div>
+            </section>
+            </div>
 
             {isChatReady ? (
               <Suspense fallback={chatFallback}>

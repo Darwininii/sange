@@ -7,6 +7,8 @@ const colorStyles = {
   amber:
     'border border-amber-700/25 bg-amber-700/10 text-amber-900 dark:border-amber-400/25 dark:bg-amber-500/15 dark:text-amber-100',
   blue: 'border border-[#1A2340]/20 bg-[#1A2340]/8 text-[#1A2340] dark:border-primary/30 dark:bg-primary/15 dark:text-primary',
+  violet:
+    'border border-violet-700/25 bg-violet-700/10 text-violet-900 dark:border-violet-400/25 dark:bg-violet-500/15 dark:text-violet-100',
   neutral:
     'border border-[#1A2340]/15 bg-[#1A2340]/5 text-[#1A2340]/80 dark:border-border dark:bg-foreground/5 dark:text-foreground/70',
   white:

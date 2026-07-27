@@ -1,5 +1,5 @@
 import { useNavigate, useRouterState } from '@tanstack/react-router'
-import { FaClockRotateLeft, FaCashRegister } from 'react-icons/fa6'
+import { FaClockRotateLeft, FaCashRegister, FaUserTie } from 'react-icons/fa6'
 import { FaSun, FaUsersCog } from 'react-icons/fa'
 import { GiMoon } from 'react-icons/gi'
 import { IoIosListBox } from 'react-icons/io'
@@ -62,6 +62,11 @@ const adminItems = [
     label: 'Clientes',
     to: '/dashboard/clients',
     icon: TbUsersGroup,
+  },
+  {
+    label: 'Proveedores',
+    to: '/dashboard/proveedor',
+    icon: FaUserTie,
   },
   {
     label: 'Historial',

@@ -1,4 +1,5 @@
 import { isSupabaseConfigured, supabase } from '../lib/supabaseClient'
+import { sanitizeProductImageForUpload } from '../shared/sanitizeProductImage'
 import {
   activityActions,
   registerActivitySafe,
@@ -17,16 +18,6 @@ const PRODUCT_SELECT =
   'id, name, sku, description, quantity, unit_price, image_url, created_by, created_at, updated_at'
 
 const IMAGE_BUCKET = 'inventory-products'
-const MAX_IMAGE_BYTES = 5 * 1024 * 1024
-const WEBP_QUALITY = 0.82
-const WEBP_MAX_EDGE = 1600
-
-const ALLOWED_IMAGE_TYPES = new Set([
-  'image/jpeg',
-  'image/png',
-  'image/webp',
-  'image/gif',
-])
 
 function requireSupabase() {
   if (!isSupabaseConfigured || !supabase) {
@@ -71,70 +62,6 @@ function toDbPayload(productData) {
   }
 }
 
-function fileBaseName(file) {
-  const raw = String(file?.name ?? 'producto')
-  const withoutExt = raw.replace(/\.[^.]+$/, '')
-  const safe = withoutExt.replace(/[^\w.-]+/g, '-').replace(/-+/g, '-').trim()
-  return safe || 'producto'
-}
-
-/**
- * Converts any browser-decodable image file to WebP via canvas.
- */
-export async function convertImageToWebp(
-  file,
-  { quality = WEBP_QUALITY, maxEdge = WEBP_MAX_EDGE } = {},
-) {
-  if (!file) {
-    throw new Error('Selecciona una imagen.')
-  }
-
-  if (typeof createImageBitmap !== 'function') {
-    throw new Error('Este navegador no soporta conversion de imagenes.')
-  }
-
-  const bitmap = await createImageBitmap(file)
-
-  try {
-    const longest = Math.max(bitmap.width, bitmap.height)
-    const scale = longest > maxEdge ? maxEdge / longest : 1
-    const width = Math.max(1, Math.round(bitmap.width * scale))
-    const height = Math.max(1, Math.round(bitmap.height * scale))
-
-    const canvas = document.createElement('canvas')
-    canvas.width = width
-    canvas.height = height
-
-    const context = canvas.getContext('2d')
-    if (!context) {
-      throw new Error('No se pudo preparar el canvas para WebP.')
-    }
-
-    context.drawImage(bitmap, 0, 0, width, height)
-
-    const blob = await new Promise((resolve, reject) => {
-      canvas.toBlob(
-        (result) => {
-          if (!result) {
-            reject(new Error('No se pudo convertir la imagen a WebP.'))
-            return
-          }
-          resolve(result)
-        },
-        'image/webp',
-        quality,
-      )
-    })
-
-    return new File([blob], `${fileBaseName(file)}.webp`, {
-      type: 'image/webp',
-      lastModified: Date.now(),
-    })
-  } finally {
-    bitmap.close?.()
-  }
-}
-
 export function getProductFormValues(product) {
   return {
     name: product?.name ?? '',
@@ -168,19 +95,8 @@ export async function uploadProductImage(file, { userId } = {}) {
     throw new Error('Selecciona una imagen.')
   }
 
-  if (!ALLOWED_IMAGE_TYPES.has(file.type) && !String(file.type).startsWith('image/')) {
-    throw new Error('Formato no permitido. Usa JPG, PNG, WEBP o GIF.')
-  }
-
-  if (file.size > MAX_IMAGE_BYTES) {
-    throw new Error('La imagen no puede superar 5 MB.')
-  }
-
-  const webpFile = await convertImageToWebp(file)
-
-  if (webpFile.size > MAX_IMAGE_BYTES) {
-    throw new Error('La imagen convertida supera 5 MB. Usa una mas liviana.')
-  }
+  // Magic-byte check + canvas rewrite to WebP (strips metadata / non-image payloads).
+  const webpFile = await sanitizeProductImageForUpload(file)
 
   const folder = userId || 'shared'
   const path = `${folder}/${crypto.randomUUID()}.webp`

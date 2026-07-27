@@ -126,7 +126,7 @@ create table if not exists public.orders (
   service_condition text
     check (
       service_condition is null
-      or service_condition in ('warranty', 'billed', 'installation')
+      or service_condition in ('warranty', 'billed', 'installation', 'sales')
     ),
   issue text not null,
   service_cost numeric(12, 2),

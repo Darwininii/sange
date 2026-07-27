@@ -321,11 +321,14 @@ function OrdersPage() {
                     <p className="font-bold text-foreground">#{order.id}</p>
                   </TableCell>
                   <TableCell>
-                    <div>
-                      <p className="font-bold text-foreground">
+                    <div className="min-w-0 max-w-44">
+                      <p
+                        className="truncate font-bold text-foreground"
+                        title={order.clientName || 'Sin cliente'}
+                      >
                         {order.clientName || 'Sin cliente'}
                       </p>
-                      <p className="text-sm text-foreground/55">
+                      <p className="truncate text-sm text-foreground/55">
                         {order.clientPhone || 'Sin telefono'}
                       </p>
                     </div>
@@ -337,7 +340,7 @@ function OrdersPage() {
                           'Sin equipo'}
                       </p>
                       <p className="text-sm text-foreground/55">
-                        {order.model || order.issue || 'Sin detalle'}
+                        {order.model || order.device || 'Sin detalle'}
                       </p>
                     </div>
                   </TableCell>

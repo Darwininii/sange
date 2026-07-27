@@ -3,6 +3,7 @@ import { FilePond, registerPlugin } from 'react-filepond'
 import FilePondPluginFileValidateType from 'filepond-plugin-file-validate-type'
 import FilePondPluginImageExifOrientation from 'filepond-plugin-image-exif-orientation'
 import FilePondPluginImagePreview from 'filepond-plugin-image-preview'
+import { ALLOWED_INPUT_IMAGE_TYPES } from './sanitizeProductImage'
 import { uploadProductImage } from '../services/inventoryService'
 import 'filepond/dist/filepond.min.css'
 import 'filepond-plugin-image-preview/dist/filepond-plugin-image-preview.css'
@@ -148,14 +149,14 @@ function ProductImagePond({
         onupdatefiles={setFiles}
         allowMultiple={false}
         maxFiles={1}
-        acceptedFileTypes={['image/jpeg', 'image/png', 'image/webp', 'image/gif']}
+        acceptedFileTypes={[...ALLOWED_INPUT_IMAGE_TYPES]}
         disabled={disabled}
         name="product-image"
         credits={false}
         instantUpload
         server={server}
         labelIdle='Arrastra una imagen o <span class="filepond--label-action">Buscar</span>'
-        labelFileProcessing="Convirtiendo a WebP..."
+        labelFileProcessing="Validando y convirtiendo a WebP..."
         labelFileProcessingComplete="Imagen lista"
         labelFileProcessingError="Error al subir"
         labelTapToCancel="Cancelar"
@@ -165,7 +166,9 @@ function ProductImagePond({
         fileValidateTypeLabelExpectedTypes="Espera imagen JPG, PNG, WEBP o GIF"
       />
       <p className="mt-2 text-xs text-foreground/45">
-        Se convierte automaticamente a WebP. Maximo 5 MB.
+        Se valida el contenido real del archivo, se reescribe a WebP (sin
+        metadatos) y solo entonces se sube. Maximo 5 MB. No se aceptan
+        ejecutables ni SVG.
       </p>
     </div>
   )

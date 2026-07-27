@@ -12,7 +12,6 @@ export const EMPTY_PART_ROW = {
   quantity: '',
   part: '',
   description: '',
-  delivery: '',
   productId: '',
   stock: null,
 }
@@ -34,7 +33,6 @@ export function normalizePartRows(parts, { minRows = 0, maxRows = PDF_PARTS_MAX_
       quantity: String(row?.quantity ?? '').trim(),
       part: String(row?.part ?? '').trim(),
       description: String(row?.description ?? '').trim(),
-      delivery: String(row?.delivery ?? '').trim(),
       productId: String(row?.productId ?? '').trim(),
       stock:
         stockValue === null ||
