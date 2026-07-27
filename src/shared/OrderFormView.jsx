@@ -40,10 +40,14 @@ import {
   applyProductToPartRow,
   createEmptyPartRow,
   getPartStockWarning,
+  getProductUsageFromParts,
   sanitizePartsAgainstProducts,
 } from './productOrderMap'
 import { getClients } from '../services/clientService'
-import { getInventoryProducts } from '../services/inventoryService'
+import {
+  getInventoryProducts,
+  subscribeInventoryProductsChanges,
+} from '../services/inventoryService'
 import {
   INITIAL_ORDER_VALUES,
   createOrder,
@@ -97,6 +101,8 @@ function OrderFormView({ mode = 'create', orderId = null }) {
   const logout = useAuthStore((state) => state.logout)
   const [form, setForm] = useState(INITIAL_ORDER_VALUES)
   const [orderUuid, setOrderUuid] = useState(null)
+  /** Stock already deducted for this order (edit mode); used so validation allows keeping current qty. */
+  const [reservedPartsUsage, setReservedPartsUsage] = useState({})
   const [technicianOptions, setTechnicianOptions] = useState([])
   const [isLoadingOrder, setIsLoadingOrder] = useState(mode === 'edit')
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -121,6 +127,8 @@ function OrderFormView({ mode = 'create', orderId = null }) {
     cacheKey: 'inventory-products',
     fetcher: getInventoryProducts,
     enabled: Boolean(userId),
+    refetchOnFocus: true,
+    subscribe: subscribeInventoryProductsChanges,
   })
   const products = useMemo(
     () => (Array.isArray(productsData) ? productsData : EMPTY_LIST),
@@ -226,6 +234,7 @@ function OrderFormView({ mode = 'create', orderId = null }) {
       if (mode !== 'edit') {
         setForm(INITIAL_ORDER_VALUES)
         setOrderUuid(null)
+        setReservedPartsUsage({})
         setIsLoadingOrder(false)
         return
       }
@@ -245,7 +254,9 @@ function OrderFormView({ mode = 'create', orderId = null }) {
           return
         }
 
-        setForm(getOrderFormValues(order))
+        const formValues = getOrderFormValues(order)
+        setForm(formValues)
+        setReservedPartsUsage(getProductUsageFromParts(formValues.parts))
         setOrderUuid(order.uuid)
       } catch (error) {
         if (cancelled) {
@@ -362,9 +373,15 @@ function OrderFormView({ mode = 'create', orderId = null }) {
     }
 
     const sanitizedParts = sanitizePartsAgainstProducts(form.parts, products)
+    const stockOptions = {
+      reservedUsage: reservedPartsUsage,
+      parts: sanitizedParts,
+    }
 
     const stockBlock = sanitizedParts.find(
-      (row) => getPartStockWarning(row, products) === 'Supera el stock actual',
+      (row) =>
+        getPartStockWarning(row, products, stockOptions) ===
+        'Supera el stock actual',
     )
 
     if (stockBlock) {
@@ -425,6 +442,14 @@ function OrderFormView({ mode = 'create', orderId = null }) {
       }
 
       navigate({ to: '/dashboard/orders' })
+    } catch (error) {
+      // Stock may have changed due to a concurrent order; refresh inventory UI.
+      if (
+        user?.id &&
+        String(error?.message ?? '').includes('Stock insuficiente')
+      ) {
+        invalidateUserCache(user.id, 'inventory-products')
+      }
     } finally {
       setIsSubmitting(false)
     }
@@ -769,7 +794,10 @@ function OrderFormView({ mode = 'create', orderId = null }) {
                   </div>
                   <div className="mt-1 space-y-3 rounded-2xl border border-border p-3">
                     {(form.parts || []).map((row, index) => {
-                      const stockWarning = getPartStockWarning(row, products)
+                      const stockWarning = getPartStockWarning(row, products, {
+                        reservedUsage: reservedPartsUsage,
+                        parts: form.parts,
+                      })
 
                       return (
                         <div

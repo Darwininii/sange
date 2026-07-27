@@ -31,6 +31,7 @@ import {
   getProductFormValues,
   INITIAL_PRODUCT_VALUES,
   updateInventoryProduct,
+  subscribeInventoryProductsChanges,
 } from '../services/inventoryService'
 import { useAuthStore } from '../store/authStore'
 import { invalidateUserCache } from '../store/dataCacheStore'
@@ -202,6 +203,8 @@ function DashboardInventoryPage() {
     cacheKey: 'inventory-products',
     fetcher: getInventoryProducts,
     enabled: Boolean(user?.id),
+    refetchOnFocus: true,
+    subscribe: subscribeInventoryProductsChanges,
   })
 
   const products = useMemo(

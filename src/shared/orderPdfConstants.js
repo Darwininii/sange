@@ -86,18 +86,6 @@ export function formatFormDateForPdf(value) {
   return formatPdfDate(raw)
 }
 
-function normalizePartsForPdf(parts) {
-  return normalizePartRows(parts, {
-    minRows: PDF_PARTS_MIN_ROWS,
-    maxRows: PDF_PARTS_MAX_ROWS,
-  }).map((row) => ({
-    quantity: row.quantity,
-    part: row.part,
-    description: row.description,
-    delivery: row.delivery,
-  }))
-}
-
 export function buildOrderPdfData({
   form,
   orderNumber = '',
@@ -126,7 +114,6 @@ export function buildOrderPdfData({
     technicianName: technicianName?.trim() || '',
     technicianDocumentNumber: technicianDocumentNumber?.trim() || '',
     diagnosis: form?.diagnosis?.trim() || '',
-    parts: normalizePartsForPdf(form?.parts),
     generatedBy: generatedBy?.trim() || '',
     generatedAt: formatPdfDate(new Date()),
   }

@@ -1,166 +1,520 @@
-import { CustomButton } from "./CustomButton";
-import { CustomDivider } from "./CustomDivider";
-import { ChevronLeft, ChevronRight } from "lucide-react";
-import { cn } from "@/lib/utils";
+Lo que estás describiendo es uno de los problemas más estudiados en bases de datos y sistemas distribuidos. No es realmente un problema de "quién fue primero", sino de **consistencia de datos cuando existen operaciones concurrentes**.
 
-interface Props {
-  totalItems: number;
-  page: number;
-  setPage: (page: number) => void;
-  itemsPerPage?: number;
-}
+En arquitectura de software este tema pertenece principalmente a:
 
-interface PaginationButtonProps {
-  pageNumber: number;
-  isActive: boolean;
-  onClick: () => void;
-}
+* Control de concurrencia (Concurrency Control)
+* Transacciones (Transactions)
+* Aislamiento de transacciones (Transaction Isolation)
+* Consistencia de datos (Data Consistency)
+* Bloqueos (Locking)
+* Control de concurrencia optimista y pesimista (Optimistic/Pessimistic Concurrency Control)
+* Condiciones de carrera (Race Conditions)
 
-const PaginationButton = ({ pageNumber, isActive, onClick }: PaginationButtonProps) => (
-  <CustomButton
-    size="sm"
-    effect={isActive ? "shine" : "magnetic"}
-    effectColor={isActive ? "bg-white/20" : undefined}
-    className={cn(
-      "w-10 h-10 min-w-10 p-0 rounded-xl font-bold transition-all duration-300",
-      isActive
-        ? "bg-black/90 text-white dark:bg-white/78 dark:text-black shadow-lg shadow-black/30 dark:shadow-white/10 scale-110 z-10"
-        : "text-black/70 dark:text-slate-300 hover:bg-black/40 dark:hover:bg-white/10 hover:text-white dark:hover:text-white"
-    )}
-    onClick={onClick}
-  >
-    {pageNumber}
-  </CustomButton>
-);
+---
 
-export const Pagination = ({ totalItems, page, setPage, itemsPerPage = 12 }: Props) => {
-  const totalPages = Math.max(1, Math.ceil(totalItems / itemsPerPage));
+# El problema real
 
-  const handleNextPage = () => {
-    setPage(Math.min(page + 1, totalPages));
-    window.scrollTo({ top: 0, behavior: "smooth" });
-  };
-  const handlePrevPage = () => {
-    setPage(Math.max(page - 1, 1));
-    window.scrollTo({ top: 0, behavior: "smooth" });
-  };
-  const goToPage = (p: number) => {
-    setPage(p);
-    window.scrollTo({ top: 0, behavior: "smooth" });
-  };
+Supongamos que tienes:
 
-  const startItem = (page - 1) * itemsPerPage + 1;
-  const endItem = Math.min(page * itemsPerPage, totalItems);
+```
+Producto A
+Stock = 10
+```
 
-  // Smart Pagination Logic (Max 5 buttons total)
-  const getVisiblePages = () => {
-    const maxVisibleTotal = 5;
-    
-    if (totalPages <= maxVisibleTotal) {
-      return Array.from({ length: totalPages }, (_, i) => i + 1);
-    }
+Dos órdenes llegan prácticamente al mismo tiempo.
 
-    // If total pages > 5, we show:
-    // 1 (first) + 3 (middle) + 1 (last) = 5 buttons max
-    // So the sliding window size is 3
-    const windowSize = 3;
-    
-    let start = Math.max(page - 1, 2);
-    let end = Math.min(start + windowSize - 1, totalPages - 1);
+```
+Orden 1
+Solicita 10
 
-    // Adjust start if end hit the ceiling
-    if (end === totalPages - 1) {
-      start = Math.max(end - windowSize + 1, 2);
-    }
+Orden 2
+Solicita 10
+```
 
-    return Array.from({ length: end - start + 1 }, (_, i) => start + i);
-  };
+Ambas ejecutan algo parecido a esto:
 
-  const visiblePages = getVisiblePages();
+```
+leer stock
 
-  return (
-    <div className="flex flex-col items-center gap-6 mt-16 pb-8">
-      
-      {/* Floating Container */}
-      <div className="relative z-10 flex items-center gap-1 p-2 bg-white/25 dark:bg-black/40 backdrop-blur-xl border border-black/30 dark:border-white/10 rounded-3xl shadow-xl shadow-black/5 dark:shadow-black/20 ring-1 ring-black/5 dark:ring-white/5">
-        
-        {/* Prev Button */}
-        <CustomButton
-          size="icon"
-          effect="magnetic"
-          disabled={page === 1}
-          onClick={handlePrevPage}
-          className={cn(
-            "w-11 h-11 rounded-2xl hover:bg-white/80 dark:hover:bg-white/20 hover:text-black dark:hover:text-white transition-all duration-300",
-            page === 1 ? "opacity-30 cursor-not-allowed" : "hover:shadow-md hover:scale-105"
-          )}
-          aria-label="Anterior"
-          centerIcon={ChevronLeft}
-          iconSize={22}
-        />
+si stock >= cantidad
+    descontar
+guardar
+```
 
-        {/* Divider */}
-        <CustomDivider orientation="vertical" className="h-6 mx-1 bg-black dark:bg-white/60" />
+Lo que ocurre es:
 
-        {/* Page Numbers */}
-        <div className="flex items-center gap-1">
-          {visiblePages[0] > 1 && (
-            <>
-              <PaginationButton 
-                pageNumber={1} 
-                isActive={page === 1} 
-                onClick={() => goToPage(1)} 
-              />
-              {visiblePages[0] > 2 && <span className="text-black/80 dark:text-white/80 px-1 font-black">...</span>}
-            </>
-          )}
+```
+Tiempo
 
-          {visiblePages.map((p) => (
-            <PaginationButton 
-              key={p} 
-              pageNumber={p} 
-              isActive={page === p} 
-              onClick={() => goToPage(p)} 
-            />
-          ))}
+Orden1 ---- lee 10 -------------------------- guarda 0
 
-          {visiblePages[visiblePages.length - 1] < totalPages && (
-            <>
-              {visiblePages[visiblePages.length - 1] < totalPages - 1 && <span className="text-black/80 dark:text-white/80 px-1 font-black">...</span>}
-              <PaginationButton 
-                pageNumber={totalPages} 
-                isActive={page === totalPages} 
-                onClick={() => goToPage(totalPages)} 
-              />
-            </>
-          )}
-        </div>
+Orden2 ---- lee 10 -------------------------- guarda 0
+```
 
-        {/* Divider */}
-        <CustomDivider orientation="vertical" className="h-6 mx-1 bg-black dark:bg-white/60" />
+Las dos leyeron el mismo valor.
 
-        {/* Next Button */}
-        <CustomButton
-          size="icon"
-          effect="magnetic"
-          disabled={page === totalPages}
-          onClick={handleNextPage}
-          className={cn(
-            "w-11 h-11 rounded-2xl hover:bg-white/80 dark:hover:bg-white/20 hover:text-black dark:hover:text-white transition-all duration-300",
-            page === totalPages ? "opacity-30 cursor-not-allowed" : "hover:shadow-md hover:scale-105"
-          )}
-          aria-label="Siguiente"
-          centerIcon={ChevronRight}
-          iconSize={22}
-        />
-      </div>
+Las dos creen que hay stock.
 
-      {/* Info Section - Now subtle and clean below controls */}
-      <div className="text-center animate-in fade-in slide-in-from-bottom-2 duration-500 delay-150">
-        <p className="text-sm font-semibold uppercase tracking-wider text-black/70 dark:text-white/70">
-          Mostrando <span className="font-bold text-black dark:text-white">{Math.min(startItem, totalItems)}</span> - <span className="font-black text-black dark:text-white">{endItem}</span> de <span className="font-bold text-black dark:text-white">{totalItems}</span>
-        </p>
-      </div>
-    </div>
-  );
-};
+Las dos descuentan.
+
+Resultado:
+
+Se vendieron 20 unidades.
+
+Cuando solo existían 10.
+
+Esto se llama una **Race Condition**.
+
+---
+
+# ¿Quién fue primero?
+
+En realidad...
+
+**No importa.**
+
+Esa es una idea importante.
+
+En sistemas concurrentes normalmente no intentas descubrir quién fue primero.
+
+Lo que haces es **forzar que exista un primero**.
+
+Es decir, el sistema decide un orden.
+
+Aunque para el usuario ambas compras ocurrieran "al mismo tiempo".
+
+Internamente siempre se serializan.
+
+---
+
+# ¿Cómo lo hacen los bancos?
+
+Imagina una cuenta bancaria.
+
+Saldo:
+
+```
+100 €
+```
+
+Dos personas intentan retirar
+
+```
+100 €
+
+100 €
+```
+
+Si ambos leen:
+
+```
+saldo = 100
+```
+
+Los dos pensarán que pueden retirar.
+
+Eso sería un desastre.
+
+Los bancos utilizan transacciones.
+
+Mientras una operación modifica ese registro...
+
+La otra espera.
+
+---
+
+# Existen varios métodos
+
+## 1. Pesimistic Locking (Bloqueo Pesimista)
+
+El primero que llega bloquea el registro.
+
+```
+Orden1
+
+LOCK Producto
+
+Stock = 10
+
+Descuenta
+
+Stock = 0
+
+UNLOCK
+```
+
+Mientras tanto
+
+```
+Orden2
+
+Espera...
+Espera...
+Espera...
+```
+
+Cuando finalmente puede leer
+
+```
+Stock = 0
+```
+
+Entonces responde
+
+```
+No hay stock suficiente.
+```
+
+Es el método más utilizado para inventarios.
+
+---
+
+## 2. Optimistic Locking
+
+Aquí no se bloquea nada.
+
+Se añade un campo
+
+```
+version
+```
+
+Ejemplo
+
+```
+Producto
+
+id = 5
+
+stock = 10
+
+version = 8
+```
+
+Dos órdenes leen
+
+```
+version = 8
+```
+
+La primera actualiza
+
+```
+stock = 0
+
+version = 9
+```
+
+La segunda intenta guardar
+
+```
+WHERE version = 8
+```
+
+Pero ya existe
+
+```
+version = 9
+```
+
+Entonces la actualización falla.
+
+Debe volver a leer.
+
+Muy usado cuando hay pocas colisiones.
+
+---
+
+## 3. Atomic Update
+
+Este es probablemente el método más elegante para inventarios.
+
+En lugar de hacer
+
+```
+leer
+
+validar
+
+guardar
+```
+
+Se hace todo en una sola instrucción SQL.
+
+Por ejemplo
+
+```sql
+UPDATE productos
+SET stock = stock - 10
+WHERE
+    id = 15
+    AND stock >= 10;
+```
+
+Después preguntas
+
+```
+¿Se actualizó una fila?
+```
+
+Si
+
+```
+Sí
+```
+
+Había stock.
+
+Si
+
+```
+0 filas
+```
+
+No había stock.
+
+No existe posibilidad de que dos usuarios descuenten el mismo stock.
+
+Porque la base de datos realiza la operación de forma atómica.
+
+Este patrón es muy utilizado.
+
+---
+
+# 4. Serializable Transactions
+
+Es el nivel de aislamiento más alto.
+
+La base de datos actúa como si todas las operaciones ocurrieran una tras otra.
+
+```
+Orden1
+
+termina
+
+Orden2
+
+termina
+
+Orden3
+```
+
+Nunca simultáneamente.
+
+Muy seguro.
+
+Más lento.
+
+---
+
+# 5. Queue (Cola)
+
+Muchos sistemas grandes hacen esto.
+
+No descuentan directamente.
+
+Todas las compras entran en una cola.
+
+```
+Compra A
+
+Compra B
+
+Compra C
+
+Compra D
+```
+
+Un único proceso procesa una por una.
+
+```
+A
+
+B
+
+C
+
+D
+```
+
+Nunca existe competencia.
+
+Amazon utiliza mucho este patrón para algunos procesos.
+
+---
+
+# ¿Cuál usan Amazon, Mercado Libre, etc.?
+
+Generalmente combinan varias técnicas.
+
+Por ejemplo:
+
+```
+API
+
+↓
+
+Transacción
+
+↓
+
+UPDATE ... WHERE stock >= ?
+
+↓
+
+Commit
+
+↓
+
+Evento
+
+↓
+
+Actualizar inventario
+```
+
+Y además:
+
+* colas
+* eventos
+* bloqueo distribuido
+* idempotencia
+* reintentos
+
+---
+
+# En tu caso
+
+Supongamos
+
+```
+Stock
+
+Tornillo
+
+Cantidad = 5
+```
+
+Orden A
+
+```
+5 tornillos
+```
+
+Orden B
+
+```
+5 tornillos
+```
+
+No deberías hacer esto:
+
+```
+1.
+Leer stock
+
+2.
+Verificar
+
+3.
+Actualizar
+```
+
+Porque ambas órdenes pueden leer
+
+```
+5
+```
+
+En cambio deberías hacer una única operación atómica.
+
+Por ejemplo:
+
+```sql
+UPDATE inventory
+SET stock = stock - 5
+WHERE
+    id = 10
+    AND stock >= 5;
+```
+
+Después:
+
+```
+Filas afectadas = 1
+```
+
+Entonces la orden continúa.
+
+Si
+
+```
+Filas afectadas = 0
+```
+
+Entonces:
+
+```
+No existe stock suficiente.
+```
+
+La segunda orden fallará automáticamente.
+
+No importa cuál llegó primero.
+
+La base de datos decidió cuál obtuvo el bloqueo primero.
+
+---
+
+# Si además manejas órdenes de servicio
+
+Un diseño muy común sería:
+
+```
+Inicio transacción
+
+↓
+
+Verificar stock
+
+↓
+
+Descontar stock (UPDATE atómico)
+
+↓
+
+Guardar movimientos de inventario
+
+↓
+
+Guardar productos usados
+
+↓
+
+Cerrar orden
+
+↓
+
+Commit
+```
+
+Si cualquiera de esos pasos falla:
+
+```
+Rollback
+```
+
+Y el stock vuelve exactamente al estado anterior.
+
+---
+
+## Mi recomendación para tu aplicación
+
+Por lo que has contado en conversaciones anteriores (React + Vite en el frontend y un sistema propio de órdenes de servicio e inventario), el enfoque más sólido es:
+
+1. **Nunca descontar el stock desde el frontend.** El cliente solo envía la solicitud.
+2. **Realizar toda la lógica en el backend** dentro de una **transacción**.
+3. **Usar una actualización atómica** (`UPDATE ... SET stock = stock - ? WHERE stock >= ?`) o un **bloqueo pesimista** (`SELECT ... FOR UPDATE`), según el motor de base de datos.
+4. **Confirmar la orden solo si el descuento de stock fue exitoso**; de lo contrario, hacer *rollback* y devolver un error indicando que ya no hay existencias suficientes.
+
+Este patrón es el que utilizan la mayoría de sistemas de inventario porque evita las condiciones de carrera sin necesidad de intentar averiguar "quién fue primero". El propio motor de la base de datos se encarga de establecer un orden seguro de ejecución.

@@ -7,6 +7,9 @@ export function useCachedData({
   fetcher,
   enabled = true,
   refetchInterval,
+  refetchOnFocus = false,
+  /** Optional (onChange) => unsubscribe; used for live cache refresh (e.g. Realtime). */
+  subscribe = null,
 }) {
   const userId = useAuthStore((state) => state.user?.id)
   const getEntry = useDataCacheStore((state) => state.getEntry)
@@ -18,6 +21,8 @@ export function useCachedData({
   const [isRefreshing, setIsRefreshing] = useState(false)
   const [error, setError] = useState(null)
   const requestIdRef = useRef(0)
+  const subscribeRef = useRef(subscribe)
+  subscribeRef.current = subscribe
 
   const loadData = useCallback(
     async ({ silent = false, force = false } = {}) => {
@@ -127,6 +132,36 @@ export function useCachedData({
 
     return () => window.clearInterval(intervalId)
   }, [cacheKey, enabled, loadData, refetchInterval, userId])
+
+  useEffect(() => {
+    if (!enabled || !userId || !refetchOnFocus) {
+      return undefined
+    }
+
+    const refreshIfVisible = () => {
+      if (document.visibilityState === 'visible') {
+        loadData({ silent: true, force: true }).catch(() => {})
+      }
+    }
+
+    window.addEventListener('focus', refreshIfVisible)
+    document.addEventListener('visibilitychange', refreshIfVisible)
+
+    return () => {
+      window.removeEventListener('focus', refreshIfVisible)
+      document.removeEventListener('visibilitychange', refreshIfVisible)
+    }
+  }, [enabled, loadData, refetchOnFocus, userId])
+
+  useEffect(() => {
+    if (!enabled || !userId || typeof subscribeRef.current !== 'function') {
+      return undefined
+    }
+
+    return subscribeRef.current(() => {
+      loadData({ silent: true, force: true }).catch(() => {})
+    })
+  }, [cacheKey, enabled, loadData, userId])
 
   const hasCache = userId ? getEntry(userId, cacheKey) !== null : false
 

@@ -319,3 +319,69 @@ export async function deleteInventoryProduct(productId) {
 
   return true
 }
+
+const inventoryChangeListeners = new Set()
+let inventoryChangesChannel = null
+let inventoryChangesTimer = null
+
+function notifyInventoryChangeListeners() {
+  if (inventoryChangesTimer != null) {
+    window.clearTimeout(inventoryChangesTimer)
+  }
+
+  // Collapse bursts (multi-product stock sync) into one refresh.
+  inventoryChangesTimer = window.setTimeout(() => {
+    inventoryChangesTimer = null
+    inventoryChangeListeners.forEach((listener) => {
+      try {
+        listener()
+      } catch {
+        // Ignore listener errors so one bad subscriber cannot break others.
+      }
+    })
+  }, 200)
+}
+
+/**
+ * Shared Realtime subscription for inventory stock/catalog changes.
+ * @param {() => void} onChange
+ * @returns {() => void} unsubscribe
+ */
+export function subscribeInventoryProductsChanges(onChange) {
+  if (!isSupabaseConfigured || !supabase || typeof onChange !== 'function') {
+    return () => {}
+  }
+
+  inventoryChangeListeners.add(onChange)
+
+  if (!inventoryChangesChannel) {
+    inventoryChangesChannel = supabase
+      .channel('inventory-products-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'inventory_products',
+        },
+        () => {
+          notifyInventoryChangeListeners()
+        },
+      )
+      .subscribe()
+  }
+
+  return () => {
+    inventoryChangeListeners.delete(onChange)
+
+    if (inventoryChangeListeners.size === 0 && inventoryChangesChannel) {
+      if (inventoryChangesTimer != null) {
+        window.clearTimeout(inventoryChangesTimer)
+        inventoryChangesTimer = null
+      }
+
+      supabase.removeChannel(inventoryChangesChannel)
+      inventoryChangesChannel = null
+    }
+  }
+}
