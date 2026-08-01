@@ -7,6 +7,7 @@ import ConfirmActions from '../shared/ConfirmActions'
 import PageHeader from '../hooks/PageHeader'
 import {
   getOrderByNumber,
+  isOrderVisibleToTechnician,
   updateOrderDiagnosis,
 } from '../services/orderService'
 import { useAuthStore } from '../store/authStore'
@@ -65,11 +66,16 @@ function ViewOrderPage() {
 
         if (
           user.role === 'technician' &&
-          result.technicianId !== user.id
+          (result.technicianId !== user.id ||
+            !isOrderVisibleToTechnician(result))
         ) {
           setOrder(null)
           setDiagnosis('')
-          appToast.warning('No tienes acceso a esta orden.')
+          appToast.warning(
+            result.technicianId === user.id
+              ? 'Esta orden aun no esta programada para ti.'
+              : 'No tienes acceso a esta orden.',
+          )
           navigate({ to: '/dashboard/orders' })
           return
         }

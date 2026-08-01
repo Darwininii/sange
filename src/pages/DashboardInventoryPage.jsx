@@ -27,6 +27,7 @@ import {
   createInventoryProduct,
   deleteInventoryProduct,
   getInventoryProducts,
+  getOrderIdsLinkedToProduct,
   getProductFormValues,
   INITIAL_PRODUCT_VALUES,
   updateInventoryProduct,
@@ -187,6 +188,8 @@ function DashboardInventoryPage() {
   const [editProduct, setEditProduct] = useState(null)
   const [editForm, setEditForm] = useState(INITIAL_PRODUCT_VALUES)
   const [deleteTarget, setDeleteTarget] = useState(null)
+  const [linkedOrderIds, setLinkedOrderIds] = useState([])
+  const [isCheckingDeleteLinks, setIsCheckingDeleteLinks] = useState(false)
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isUploadingImage, setIsUploadingImage] = useState(false)
@@ -277,16 +280,36 @@ function DashboardInventoryPage() {
     }
   }
 
-  function openEditDialog(product) {
+  function closeDeleteDialog() {
     setDeleteTarget(null)
+    setLinkedOrderIds([])
+  }
+
+  function openEditDialog(product) {
+    closeDeleteDialog()
     setEditProduct(product)
     setEditForm(getProductFormValues(product))
     setEditPondKey((current) => current + 1)
   }
 
-  function openDeleteDialog(product) {
+  async function openDeleteDialog(product) {
     setEditProduct(null)
-    setDeleteTarget(product)
+    setIsCheckingDeleteLinks(true)
+
+    try {
+      const orderIds = await getOrderIdsLinkedToProduct(product.id)
+      setLinkedOrderIds(orderIds)
+      setDeleteTarget(product)
+    } catch (productError) {
+      appToast.danger(
+        getErrorMessage(
+          productError,
+          'No se pudieron consultar las ordenes vinculadas.',
+        ),
+      )
+    } finally {
+      setIsCheckingDeleteLinks(false)
+    }
   }
 
   function hasRequiredFields(form) {
@@ -386,12 +409,14 @@ function DashboardInventoryPage() {
         error: (productError) =>
           getErrorMessage(productError, 'No se pudo eliminar el producto.'),
       })
-      setDeleteTarget(null)
+      closeDeleteDialog()
       await refreshProducts()
     } finally {
       setIsSubmitting(false)
     }
   }
+
+  const isLinkedDelete = linkedOrderIds.length > 0
 
   return (
     <DashboardLayout user={user} onLogout={handleLogout}>
@@ -483,17 +508,51 @@ function DashboardInventoryPage() {
             </AppDialog>
 
             <YesONo
-              open={Boolean(deleteTarget)}
+              open={Boolean(deleteTarget) && !isLinkedDelete}
               title="Eliminar producto"
               isSubmitting={isSubmitting}
               description={`El producto ${deleteTarget?.name || ''} se eliminará de forma permanente.`}
               onConfirm={handleDeleteProduct}
               onOpenChange={(open) => {
                 if (!open) {
-                  setDeleteTarget(null)
+                  closeDeleteDialog()
                 }
               }}
             />
+
+            <AppDialog
+              open={Boolean(deleteTarget) && isLinkedDelete}
+              title="Eliminar producto"
+              onOpenChange={(open) => {
+                if (!open) {
+                  closeDeleteDialog()
+                }
+              }}
+            >
+              <div className="mt-5 grid gap-5">
+                <div className="rounded-3xl bg-amber-500/10 px-5 py-4 text-sm text-amber-900 dark:text-amber-100">
+                  <p className="font-bold">
+                    ¿Estás seguro de que quieres eliminar este producto?
+                  </p>
+                  <p className="mt-2">
+                    Este producto ya está vinculado a las ordenes. Si lo eliminas, debes cambiar el producto en las ordenes manualmente:
+                  </p>
+                  <ul className="mt-3 list-disc space-y-1 pl-5 font-semibold tabular-nums">
+                    {linkedOrderIds.map((orderId) => (
+                      <li key={orderId}>{orderId}</li>
+                    ))}
+                  </ul>
+                </div>
+                <ConfirmActions
+                  variant="dialog"
+                  cancelLabel="No"
+                  confirmLabel="Si"
+                  isSubmitting={isSubmitting}
+                  onCancel={closeDeleteDialog}
+                  onConfirm={handleDeleteProduct}
+                />
+              </div>
+            </AppDialog>
           </>
         }
       >
@@ -591,7 +650,7 @@ function DashboardInventoryPage() {
                         label="Eliminar producto"
                         tooltip="Eliminar producto"
                         tone="red"
-                        disabled={isSubmitting}
+                        disabled={isSubmitting || isCheckingDeleteLinks}
                         onClick={() => openDeleteDialog(product)}
                       />
                     </div>

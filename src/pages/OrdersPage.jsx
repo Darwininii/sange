@@ -34,7 +34,10 @@ import {
 } from '../shared/table'
 import { useCachedData } from '../hooks/useCachedData'
 import { usePagination } from '../hooks/usePagination'
-import { getOrders } from '../services/orderService'
+import {
+  getOrders,
+  isOrderVisibleToTechnician,
+} from '../services/orderService'
 import { useAuthStore } from '../store/authStore'
 import { signOutUser } from '../utils/auth'
 
@@ -119,6 +122,7 @@ function OrdersPage() {
   const user = useAuthStore((state) => state.user)
   const logout = useAuthStore((state) => state.logout)
   const [search, setSearch] = useState('')
+  const [visibilityNow, setVisibilityNow] = useState(() => Date.now())
   const isTechnician = user?.role === 'technician'
 
   const {
@@ -133,17 +137,48 @@ function OrdersPage() {
 
   const userId = user?.id
 
+  useEffect(() => {
+    if (!isTechnician || !userId) {
+      return undefined
+    }
+
+    const list = Array.isArray(ordersData) ? ordersData : []
+    const now = Date.now()
+    const nextDue = list
+      .filter((order) => order.technicianId === userId && order.scheduledAt)
+      .map((order) => new Date(order.scheduledAt).getTime())
+      .filter((time) => Number.isFinite(time) && time > now)
+      .sort((a, b) => a - b)[0]
+
+    if (nextDue == null) {
+      return undefined
+    }
+
+    const delay = Math.min(nextDue - now + 250, 2_147_483_647)
+    const timer = window.setTimeout(() => {
+      setVisibilityNow(Date.now())
+    }, delay)
+
+    return () => window.clearTimeout(timer)
+  }, [ordersData, isTechnician, userId])
+
   const orders = useMemo(() => {
     const list = Array.isArray(ordersData) ? ordersData : []
     if (!isTechnician || !userId) {
       return list
     }
 
+    const now = new Date(visibilityNow)
+
     return list
-      .filter((order) => order.technicianId === userId)
+      .filter(
+        (order) =>
+          order.technicianId === userId &&
+          isOrderVisibleToTechnician(order, now),
+      )
       .slice()
       .sort((a, b) => getOrderRecencyTime(b) - getOrderRecencyTime(a))
-  }, [ordersData, isTechnician, userId])
+  }, [ordersData, isTechnician, userId, visibilityNow])
 
   const filteredOrders = useMemo(
     () => orders.filter((order) => matchesOrderSearch(order, search.trim())),

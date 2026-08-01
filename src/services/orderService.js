@@ -24,6 +24,8 @@ export const INITIAL_ORDER_VALUES = {
   serviceType: '',
   serviceCondition: '',
   technicianId: '',
+  scheduleEnabled: false,
+  scheduledAt: '',
   issue: '',
   serviceCost: '',
   previousServiceNotes: '',
@@ -39,7 +41,7 @@ export const INITIAL_ORDER_VALUES = {
 }
 
 const ORDER_SELECT =
-  'id, order_number, client_name, client_phone, client_email, client_address, device, brand, model, serial_number, service_type, service_condition, assigned_technician_id, issue, service_cost, previous_service_notes, document_number, external_order_number, delivery_date, repair_date, purchase_date, symptom, diagnosis, parts, abonos, status, created_by, created_at, updated_at'
+  'id, order_number, client_name, client_phone, client_email, client_address, device, brand, model, serial_number, service_type, service_condition, assigned_technician_id, scheduled_at, issue, service_cost, previous_service_notes, document_number, external_order_number, delivery_date, repair_date, purchase_date, symptom, diagnosis, parts, abonos, status, created_by, created_at, updated_at'
 
 function normalizeParts(parts) {
   const normalized = normalizePartRows(parts, { minRows: 1 })
@@ -61,6 +63,70 @@ function toDateInputValue(value) {
     return raw.slice(0, 10)
   }
   return ''
+}
+
+/** ISO / DB timestamptz → local `YYYY-MM-DDTHH:mm` for form controls. */
+function toDateTimeLocalValue(value) {
+  if (!value) {
+    return ''
+  }
+
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) {
+    return ''
+  }
+
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  const hours = String(date.getHours()).padStart(2, '0')
+  const minutes = String(date.getMinutes()).padStart(2, '0')
+
+  return `${year}-${month}-${day}T${hours}:${minutes}`
+}
+
+/**
+ * Local datetime form value → ISO timestamptz for DB, or null if empty/invalid.
+ * Accepts `YYYY-MM-DDTHH:mm` or date-only (defaults to 09:00). Time-only is ignored.
+ */
+function toDbDateTime(value) {
+  const raw = String(value ?? '').trim()
+  if (!raw) {
+    return null
+  }
+
+  const full = raw.match(/^(\d{4}-\d{2}-\d{2})[T ](\d{2}:\d{2})(?::\d{2})?/)
+  if (full) {
+    const date = new Date(`${full[1]}T${full[2]}:00`)
+    return Number.isNaN(date.getTime()) ? null : date.toISOString()
+  }
+
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
+    const date = new Date(`${raw}T09:00:00`)
+    return Number.isNaN(date.getTime()) ? null : date.toISOString()
+  }
+
+  return null
+}
+
+/**
+ * Technicians see assigned orders immediately when scheduledAt is null/past.
+ * Future scheduledAt keeps the assignment but hides the order until due.
+ */
+export function isOrderVisibleToTechnician(order, now = new Date()) {
+  if (!order?.scheduledAt) {
+    return true
+  }
+
+  const scheduled = new Date(order.scheduledAt)
+  if (Number.isNaN(scheduled.getTime())) {
+    return true
+  }
+
+  const reference =
+    now instanceof Date && !Number.isNaN(now.getTime()) ? now : new Date()
+
+  return scheduled.getTime() <= reference.getTime()
 }
 
 export function formatOrderId(orderNumber) {
@@ -85,6 +151,8 @@ export function getOrderFormValues(order) {
     serviceType: order?.serviceType ?? '',
     serviceCondition: order?.serviceCondition ?? '',
     technicianId: order?.technicianId ?? '',
+    scheduleEnabled: Boolean(order?.scheduledAt),
+    scheduledAt: toDateTimeLocalValue(order?.scheduledAt),
     issue: order?.issue ?? '',
     serviceCost:
       order?.serviceCost === null || order?.serviceCost === undefined
@@ -131,6 +199,7 @@ function mapOrder(row) {
     serviceType: row.service_type ?? null,
     serviceCondition: row.service_condition ?? null,
     technicianId: row.assigned_technician_id ?? '',
+    scheduledAt: row.scheduled_at ?? null,
     issue: row.issue ?? '',
     serviceCost: row.service_cost ?? null,
     previousServiceNotes: row.previous_service_notes ?? '',
@@ -172,6 +241,7 @@ function toDbPayload(orderData) {
     service_type: orderData.serviceType || null,
     service_condition: condition,
     assigned_technician_id: orderData.technicianId || null,
+    scheduled_at: toDbDateTime(orderData.scheduledAt),
     issue: orderData.issue,
     service_cost:
       condition === 'billed' && Number.isFinite(parsedCost) ? parsedCost : null,
@@ -266,6 +336,7 @@ export async function createOrder(orderData, { createdBy } = {}) {
       clientName: created.clientName,
       technicianId: assignedTechnicianId,
       assigned: Boolean(assignedTechnicianId),
+      scheduledAt: created.scheduledAt ?? null,
     },
   })
 
@@ -321,6 +392,7 @@ export async function updateOrder(orderId, orderData) {
       technicianId: nextTechnicianId,
       previousTechnicianId,
       assigned,
+      scheduledAt: updated.scheduledAt ?? null,
     },
   })
 

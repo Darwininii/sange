@@ -202,6 +202,49 @@ export async function updateInventoryProduct(productId, productData) {
   return updated
 }
 
+/**
+ * Order display IDs (padded order_number) that still reference this inventory product.
+ */
+export async function getOrderIdsLinkedToProduct(productId) {
+  const client = requireSupabase()
+  const normalizedId = String(productId ?? '').trim()
+
+  if (!normalizedId) {
+    return []
+  }
+
+  // JSON string required: passing a JS array makes PostgREST treat `cs` as a
+  // Postgres array literal ({[object Object]}), which breaks jsonb columns.
+  const { data, error } = await client
+    .from('orders')
+    .select('order_number, parts')
+    .contains('parts', JSON.stringify([{ productId: normalizedId }]))
+    .order('order_number', { ascending: true })
+
+  if (error) {
+    throw new Error(
+      `No se pudieron consultar las ordenes vinculadas: ${error.message}`,
+    )
+  }
+
+  const orderIds = []
+
+  for (const row of data ?? []) {
+    const parts = Array.isArray(row.parts) ? row.parts : []
+    const isLinked = parts.some(
+      (part) => String(part?.productId ?? '').trim() === normalizedId,
+    )
+
+    if (!isLinked || row.order_number == null) {
+      continue
+    }
+
+    orderIds.push(String(row.order_number).padStart(2, '0'))
+  }
+
+  return orderIds
+}
+
 export async function deleteInventoryProduct(productId) {
   const client = requireSupabase()
 

@@ -3,10 +3,11 @@ import { FaCalendarDays } from 'react-icons/fa6'
 import { LuArrowBigRight } from 'react-icons/lu'
 import { TiArrowBackOutline } from 'react-icons/ti'
 import AppButton from './AppButton'
+import { cn } from '@/lib/utils'
 import 'cally'
 
-const FIELD_CLASS =
-  'h-auto w-full justify-between rounded-2xl border border-border bg-background px-4 py-3 text-left font-normal outline-none transition focus-visible:border-primary focus-visible:ring-4 focus-visible:ring-primary/20'
+const FIELD_SHELL =
+  'flex h-auto w-full items-center gap-2 rounded-2xl border border-border bg-background px-3 py-2 outline-none transition focus-within:border-primary focus-within:ring-4 focus-within:ring-primary/20'
 
 const MONTH_LABELS = [
   'enero',
@@ -64,24 +65,140 @@ function toIsoDate({ year, month, day }) {
   return `${year}-${String(month).padStart(2, '0')}-${String(safeDay).padStart(2, '0')}`
 }
 
+function currentYear() {
+  return new Date().getFullYear()
+}
+
+/** ISO `YYYY-MM-DD` → `DD/MM/YYYY`. */
 function formatDisplayDate(value) {
   const raw = String(value ?? '').trim()
   if (!/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
     return ''
   }
 
-  const { year, month, day } = parseIsoDate(raw)
-  const date = new Date(year, month - 1, day)
+  const [year, month, day] = raw.split('-')
+  return `${day}/${month}/${year}`
+}
 
-  if (Number.isNaN(date.getTime())) {
+function isValidIsoDate(year, month, day) {
+  if (
+    !Number.isFinite(year) ||
+    !Number.isFinite(month) ||
+    !Number.isFinite(day) ||
+    month < 1 ||
+    month > 12 ||
+    day < 1
+  ) {
+    return false
+  }
+
+  const date = new Date(year, month - 1, day)
+  return (
+    date.getFullYear() === year &&
+    date.getMonth() === month - 1 &&
+    date.getDate() === day
+  )
+}
+
+function clampDayDigits(dayDigits) {
+  if (dayDigits.length === 0) {
     return ''
   }
 
-  return new Intl.DateTimeFormat('es-CO', {
-    day: '2-digit',
-    month: 'short',
-    year: 'numeric',
-  }).format(date)
+  if (dayDigits.length === 1) {
+    return dayDigits[0] > '3' ? '3' : dayDigits
+  }
+
+  let day = Number(dayDigits.slice(0, 2))
+  if (!Number.isFinite(day) || day < 1) {
+    day = 1
+  }
+  if (day > 31) {
+    day = 31
+  }
+
+  return String(day).padStart(2, '0')
+}
+
+function clampMonthDigits(monthDigits) {
+  if (monthDigits.length === 0) {
+    return ''
+  }
+
+  if (monthDigits.length === 1) {
+    return monthDigits[0] > '1' ? '1' : monthDigits
+  }
+
+  let month = Number(monthDigits.slice(0, 2))
+  if (!Number.isFinite(month) || month < 1) {
+    month = 1
+  }
+  if (month > 12) {
+    month = 12
+  }
+
+  return String(month).padStart(2, '0')
+}
+
+/**
+ * Mask while typing: DD/MM/ + current year once month is complete.
+ * Example: 15 → 15/ → 1502 → 15/02/2026
+ */
+function maskDateTyping(raw) {
+  const digits = String(raw ?? '')
+    .replace(/\D/g, '')
+    .slice(0, 8)
+
+  if (!digits) {
+    return ''
+  }
+
+  const day = clampDayDigits(digits.slice(0, 2))
+  const month = clampMonthDigits(digits.slice(2, 4))
+
+  if (digits.length <= 2) {
+    return digits.length === 2 ? `${day}/` : day
+  }
+
+  if (digits.length < 4) {
+    return `${day}/${month}`
+  }
+
+  if (digits.length === 4) {
+    return `${day}/${month}/${currentYear()}`
+  }
+
+  return `${day}/${month}/${digits.slice(4)}`
+}
+
+/** Accepts `YYYY-MM-DD` or `DD/MM/YYYY` (year defaults to current if omitted). */
+function parseTypedDate(raw) {
+  const normalized = String(raw ?? '').trim()
+
+  if (!normalized) {
+    return ''
+  }
+
+  if (/^\d{4}-\d{2}-\d{2}$/.test(normalized)) {
+    const [year, month, day] = normalized.split('-').map(Number)
+    return isValidIsoDate(year, month, day) ? normalized : null
+  }
+
+  const masked = maskDateTyping(normalized)
+  const dmy = masked.match(/^(\d{2})\/(\d{2})\/(\d{1,4})$/)
+  if (!dmy) {
+    return null
+  }
+
+  const day = Number(dmy[1])
+  const month = Number(dmy[2])
+  const year = dmy[3].length === 4 ? Number(dmy[3]) : currentYear()
+
+  if (!isValidIsoDate(year, month, day)) {
+    return null
+  }
+
+  return toIsoDate({ year, month, day })
 }
 
 function DatePicker({
@@ -96,18 +213,27 @@ function DatePicker({
   const containerRef = useRef(null)
   const [open, setOpen] = useState(false)
   const [view, setView] = useState('days') // days | months | years
+  const [inputFocused, setInputFocused] = useState(false)
+  const [text, setText] = useState(() => formatDisplayDate(value))
   const [focused, setFocused] = useState(() => parseIsoDate(value))
   const [yearWindowStart, setYearWindowStart] = useState(
     () => parseIsoDate(value).year - 6,
   )
-  const displayValue = formatDisplayDate(value)
   const focusedIso = toIsoDate(focused)
+  const datePlaceholder =
+    placeholder === 'Seleccionar fecha' ? 'dd/mm/aaaa' : placeholder
 
   const yearOptions = useMemo(
     () =>
       Array.from({ length: YEAR_PAGE_SIZE }, (_, index) => yearWindowStart + index),
     [yearWindowStart],
   )
+
+  useEffect(() => {
+    if (!inputFocused) {
+      setText(formatDisplayDate(value))
+    }
+  }, [value, inputFocused])
 
   useEffect(() => {
     if (!open) {
@@ -139,6 +265,25 @@ function DatePicker({
       document.removeEventListener('keydown', handleKeyDown)
     }
   }, [open, view])
+
+  function commitTypedText(raw = text) {
+    const parsed = parseTypedDate(raw)
+
+    if (parsed === '') {
+      onChange?.('')
+      setText('')
+      return
+    }
+
+    if (parsed == null) {
+      setText(formatDisplayDate(value))
+      return
+    }
+
+    onChange?.(parsed)
+    setText(formatDisplayDate(parsed))
+    setFocused(parseIsoDate(parsed))
+  }
 
   function openYearsView() {
     setYearWindowStart(focused.year - 6)
@@ -187,32 +332,63 @@ function DatePicker({
     <div className="relative w-full" ref={containerRef}>
       {label ? <FieldLabel required={required}>{label}</FieldLabel> : null}
 
-      <AppButton
-        type="button"
-        variant="outline"
-        disabled={disabled}
-        rightIcon={FaCalendarDays}
-        className={FIELD_CLASS}
-        aria-haspopup="dialog"
-        aria-expanded={open}
-        aria-controls={panelId}
-        onClick={() => {
-          if (open) {
-            setOpen(false)
-            return
-          }
-
-          const nextFocused = parseIsoDate(value)
-          setFocused(nextFocused)
-          setYearWindowStart(nextFocused.year - 6)
-          setView('days')
-          setOpen(true)
-        }}
+      <div
+        className={cn(
+          FIELD_SHELL,
+          disabled && 'cursor-not-allowed opacity-60',
+        )}
       >
-        <span className={displayValue ? 'text-foreground' : 'text-foreground/45'}>
-          {displayValue || placeholder}
-        </span>
-      </AppButton>
+        <input
+          type="text"
+          inputMode="numeric"
+          autoComplete="off"
+          disabled={disabled}
+          value={text}
+          placeholder={datePlaceholder}
+          aria-label={label || 'Fecha'}
+          className="min-w-0 flex-1 cursor-text bg-transparent px-1 py-1 text-sm text-foreground outline-none placeholder:text-foreground/45 disabled:cursor-not-allowed"
+          onFocus={() => {
+            setInputFocused(true)
+            setText(formatDisplayDate(value) || text)
+          }}
+          onChange={(event) => setText(maskDateTyping(event.target.value))}
+          onBlur={() => {
+            setInputFocused(false)
+            commitTypedText()
+          }}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter') {
+              event.preventDefault()
+              commitTypedText()
+              event.currentTarget.blur()
+            }
+          }}
+        />
+        <AppButton
+          type="button"
+          size="icon"
+          variant="ghost"
+          disabled={disabled}
+          icon={FaCalendarDays}
+          tooltip="Elegir fecha"
+          className="size-9 shrink-0 cursor-pointer rounded-xl"
+          aria-haspopup="dialog"
+          aria-expanded={open}
+          aria-controls={panelId}
+          onClick={() => {
+            if (open) {
+              setOpen(false)
+              return
+            }
+
+            const nextFocused = parseIsoDate(value)
+            setFocused(nextFocused)
+            setYearWindowStart(nextFocused.year - 6)
+            setView('days')
+            setOpen(true)
+          }}
+        />
+      </div>
 
       <input type="hidden" value={value || ''} required={required} readOnly />
 

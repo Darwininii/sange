@@ -201,12 +201,30 @@ function getNotificationSubtitle(activity, user = null) {
   return getActivityMessage(activity)
 }
 
+function isScheduleDueForTechnician(metadata) {
+  const scheduledAt = metadata?.scheduledAt
+  if (!scheduledAt) {
+    return true
+  }
+
+  const when = new Date(scheduledAt)
+  if (Number.isNaN(when.getTime())) {
+    return true
+  }
+
+  return when.getTime() <= Date.now()
+}
+
 /** Technicians only see orders assigned to them (and messages on those). */
 function isRelevantForTechnician(activity, userId) {
   const metadata = activity?.metadata ?? {}
   const technicianId = String(metadata.technicianId ?? '')
 
   if (!technicianId || technicianId !== String(userId)) {
+    return false
+  }
+
+  if (!isScheduleDueForTechnician(metadata)) {
     return false
   }
 

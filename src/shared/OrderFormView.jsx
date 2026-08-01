@@ -11,9 +11,16 @@ import PageHeader from '../hooks/PageHeader'
 import { useCachedData } from '../hooks/useCachedData'
 import AppSelect from './select'
 import AppButton from './AppButton'
+import AppDialog from './dialog'
 import ClientLookupInput from './ClientLookupInput'
 import ConfirmActions from './ConfirmActions'
+import DateTimePicker from './DateTimePicker'
 import ProductLookupInput from './ProductLookupInput'
+import {
+  getScheduleIssueMessages,
+  getScheduleIssues,
+  splitScheduleValue,
+} from './scheduleValidation'
 import {
   applyClientToOrderForm,
   canQuickAddClientFromOrder,
@@ -126,6 +133,7 @@ function OrderFormView({ mode = 'create', orderId = null }) {
   const [isQuickAddingClient, setIsQuickAddingClient] = useState(false)
   const [isPdfOpen, setIsPdfOpen] = useState(false)
   const [isChatDeferred, setIsChatDeferred] = useState(false)
+  const [isScheduleTimeDialogOpen, setIsScheduleTimeDialogOpen] = useState(false)
   const config = modeConfig[mode] ?? modeConfig.create
   const isWarranty = form.serviceCondition === 'warranty'
   const isBilled = form.serviceCondition === 'billed'
@@ -541,6 +549,34 @@ function OrderFormView({ mode = 'create', orderId = null }) {
       return
     }
 
+    if (form.scheduleEnabled) {
+      const { date, time } = splitScheduleValue(form.scheduledAt)
+      const scheduleIssues = getScheduleIssues(form.scheduledAt)
+
+      if (!time) {
+        setIsScheduleTimeDialogOpen(true)
+        return
+      }
+
+      if (!date || scheduleIssues.includes('missing-date')) {
+        appToast.warning(
+          'Indica la fecha de programacion para el tecnico, o desactiva la programacion.',
+        )
+        return
+      }
+
+      const pastMessages = getScheduleIssueMessages(
+        scheduleIssues.filter(
+          (issue) => issue === 'past-date' || issue === 'past-time',
+        ),
+      )
+
+      if (pastMessages.length > 0) {
+        appToast.warning(pastMessages[0])
+        return
+      }
+    }
+
     const payload = {
       clientName: form.clientName.trim(),
       clientPhone: form.clientPhone.trim(),
@@ -553,6 +589,7 @@ function OrderFormView({ mode = 'create', orderId = null }) {
       serviceType: form.serviceType,
       serviceCondition: form.serviceCondition,
       technicianId: form.technicianId,
+      scheduledAt: form.scheduleEnabled ? form.scheduledAt : '',
       issue: '',
       serviceCost: form.serviceCost,
       previousServiceNotes: form.previousServiceNotes.trim(),
@@ -691,6 +728,36 @@ function OrderFormView({ mode = 'create', orderId = null }) {
           </Suspense>
         ) : null}
 
+        <AppDialog
+          open={isScheduleTimeDialogOpen}
+          title="Hora de programacion pendiente"
+          onOpenChange={setIsScheduleTimeDialogOpen}
+        >
+          <div className="mt-5 grid gap-5">
+            <div className="rounded-3xl bg-amber-500/10 px-5 py-4 text-sm text-amber-950 dark:text-amber-100">
+              <p className="font-bold">
+                No se puede guardar la orden con la programacion incompleta.
+              </p>
+              <p className="mt-2 leading-relaxed">
+                Activaste la programacion para el tecnico, pero no se definio una
+                hora. Para continuar, indica la hora en la que la orden debe
+                quedar disponible para el tecnico, o desactiva la programacion
+                si deseas que la asignacion sea inmediata al guardar.
+              </p>
+            </div>
+            <div className="flex justify-end">
+              <AppButton
+                type="button"
+                variant="solid"
+                effect="zoomIn"
+                onClick={() => setIsScheduleTimeDialogOpen(false)}
+              >
+                Entendido
+              </AppButton>
+            </div>
+          </div>
+        </AppDialog>
+
         {isLoadingOrder ? (
           <div className="mt-6 flex justify-center rounded-4xl bg-surface px-5 py-10 shadow-sm ring-1 ring-border">
             <Loader
@@ -706,6 +773,50 @@ function OrderFormView({ mode = 'create', orderId = null }) {
               onSubmit={handleSubmit}
             >
               <div className="grid gap-4 md:grid-cols-2">
+                <div className="md:col-span-2 rounded-2xl border border-border p-4">
+                  <DateTimePicker
+                    label="Programar para el tecnico"
+                    value={form.scheduledAt}
+                    enabled={form.scheduleEnabled}
+                    datePlaceholder="dd/mm/aaaa"
+                    timePlaceholder="h:mm a. m."
+                    hint="Activa el checkbox para programar fecha y hora. Si esta desactivado, la orden aparece de inmediato al tecnico."
+                    onEnabledChange={(scheduleEnabled) =>
+                      setForm((currentForm) => ({
+                        ...currentForm,
+                        scheduleEnabled,
+                      }))
+                    }
+                    onChange={(scheduledAt) =>
+                      setForm((currentForm) => ({
+                        ...currentForm,
+                        scheduledAt,
+                      }))
+                    }
+                  />
+                </div>
+
+                <div className="md:col-span-2 grid gap-4 md:grid-cols-2">
+                  <div>
+                    <FieldLabel>Tecnico asignado</FieldLabel>
+                    <AppSelect
+                      value={form.technicianId || 'none'}
+                      options={[
+                        { value: 'none', label: 'Sin asignar' },
+                        ...technicianOptions,
+                      ]}
+                      placeholder="Seleccionar tecnico"
+                      onValueChange={(technicianId) =>
+                        setForm((currentForm) => ({
+                          ...currentForm,
+                          technicianId:
+                            technicianId === 'none' ? '' : technicianId,
+                        }))
+                      }
+                    />
+                  </div>
+                </div>
+
                 <div>
                   <FieldLabel required>Condicion del servicio</FieldLabel>
                   <AppSelect
@@ -882,24 +993,6 @@ function OrderFormView({ mode = 'create', orderId = null }) {
                   />
                 </label>
 
-                <div>
-                  <FieldLabel>Tecnico asignado</FieldLabel>
-                  <AppSelect
-                    value={form.technicianId || 'none'}
-                    options={[
-                      { value: 'none', label: 'Sin asignar' },
-                      ...technicianOptions,
-                    ]}
-                    placeholder="Seleccionar tecnico"
-                    onValueChange={(technicianId) =>
-                      setForm((currentForm) => ({
-                        ...currentForm,
-                        technicianId: technicianId === 'none' ? '' : technicianId,
-                      }))
-                    }
-                  />
-                </div>
-
                 <Suspense fallback={dateFallback}>
                   <DatePicker
                     label="Fecha de entrega"
@@ -1014,45 +1107,54 @@ function OrderFormView({ mode = 'create', orderId = null }) {
                           key={`part-row-${index}`}
                           className="space-y-1.5 rounded-xl bg-background/60 p-2 ring-1 ring-border/60"
                         >
-                          <div className="grid gap-2 md:grid-cols-[minmax(0,1.4fr)_minmax(0,0.7fr)_minmax(0,1.4fr)_auto]">
-                            <ProductLookupInput
-                              value={row.part}
-                              placeholder="Parte / Producto"
-                              products={products}
-                              onValueChange={(value) =>
-                                handlePartChange(index, 'part', value)
-                              }
-                              onSelectProduct={(product) =>
-                                handleSelectPartProduct(index, product)
-                              }
-                            />
-                            <input
-                              className={NUMBER_FIELD_CLASS}
-                              value={row.quantity}
-                              placeholder="Cantidad"
-                              type="number"
-                              min="0"
-                              step="1"
-                              onChange={(event) =>
-                                handlePartChange(
-                                  index,
-                                  'quantity',
-                                  event.target.value,
-                                )
-                              }
-                            />
-                            <input
-                              className={FIELD_CLASS}
-                              value={row.description}
-                              placeholder="Descripcion"
-                              onChange={(event) =>
-                                handlePartChange(
-                                  index,
-                                  'description',
-                                  event.target.value,
-                                )
-                              }
-                            />
+                          <div className="grid items-end gap-2 md:grid-cols-[minmax(0,1.4fr)_minmax(0,0.7fr)_minmax(0,1.4fr)_auto]">
+                            <div>
+                              <FieldLabel>Producto</FieldLabel>
+                              <ProductLookupInput
+                                value={row.part}
+                                placeholder="Parte / Producto"
+                                products={products}
+                                onValueChange={(value) =>
+                                  handlePartChange(index, 'part', value)
+                                }
+                                onSelectProduct={(product) =>
+                                  handleSelectPartProduct(index, product)
+                                }
+                              />
+                            </div>
+                            <div>
+                              <FieldLabel>Cantidad</FieldLabel>
+                              <input
+                                className={NUMBER_FIELD_CLASS}
+                                value={row.quantity}
+                                placeholder="Cantidad"
+                                type="number"
+                                min="0"
+                                step="1"
+                                onChange={(event) =>
+                                  handlePartChange(
+                                    index,
+                                    'quantity',
+                                    event.target.value,
+                                  )
+                                }
+                              />
+                            </div>
+                            <div>
+                              <FieldLabel>Descripcion</FieldLabel>
+                              <input
+                                className={FIELD_CLASS}
+                                value={row.description}
+                                placeholder="Descripcion"
+                                onChange={(event) =>
+                                  handlePartChange(
+                                    index,
+                                    'description',
+                                    event.target.value,
+                                  )
+                                }
+                              />
+                            </div>
                             <AppButton
                               type="button"
                               size="icon"
@@ -1109,79 +1211,98 @@ function OrderFormView({ mode = 'create', orderId = null }) {
                       key={`abono-row-${index}-${row.registeredAt || index}`}
                       className="space-y-1.5 rounded-xl bg-background/60 p-2 ring-1 ring-border/60"
                     >
-                      <div className="grid gap-2 md:grid-cols-[minmax(0,0.9fr)_minmax(0,0.9fr)_minmax(0,0.9fr)_minmax(0,1fr)_minmax(0,1.1fr)_auto]">
-                        <input
-                          className={
-                            index > 0
-                              ? `${NUMBER_FIELD_CLASS} cursor-default bg-foreground/5 text-foreground/80`
-                              : NUMBER_FIELD_CLASS
-                          }
-                          value={row.totalPrice}
-                          placeholder="Precio total"
-                          type="number"
-                          min="0"
-                          step="0.01"
-                          readOnly={index > 0}
-                          tabIndex={index > 0 ? -1 : undefined}
-                          onChange={(event) =>
-                            handleAbonoChange(
-                              index,
-                              'totalPrice',
-                              event.target.value,
-                            )
-                          }
-                        />
-                        <input
-                          className={NUMBER_FIELD_CLASS}
-                          value={row.amount}
-                          placeholder="Abono"
-                          type="number"
-                          min="0"
-                          step="0.01"
-                          onChange={(event) =>
-                            handleAbonoChange(index, 'amount', event.target.value)
-                          }
-                        />
-                        <input
-                          className={`${FIELD_CLASS} cursor-default bg-foreground/5 text-foreground/80`}
-                          value={row.balance}
-                          placeholder="Saldo"
-                          type="text"
-                          readOnly
-                          tabIndex={0}
-                          aria-label="Saldo"
-                        />
-                        <AppSelect
-                          value={row.paymentType || 'none'}
-                          options={[
-                            { value: 'none', label: 'Tipo de pago' },
-                            ...PAYMENT_TYPE_OPTIONS,
-                          ]}
-                          placeholder="Tipo de pago"
-                          onValueChange={(paymentType) =>
-                            handleAbonoChange(
-                              index,
-                              'paymentType',
-                              paymentType === 'none' ? '' : paymentType,
-                            )
-                          }
-                        />
-                        <AppSelect
-                          value={row.bank || 'none'}
-                          options={[
-                            { value: 'none', label: 'Seleccionar banco' },
-                            ...BANK_OPTIONS,
-                          ]}
-                          placeholder="Seleccionar banco"
-                          disabled={!isBankPayment}
-                          onValueChange={(bank) =>
-                            handleAbonoChange(
-                              index,
-                              'bank',
-                              bank === 'none' ? '' : bank,
-                            )
-                          }
-                        />
+                      <div className="grid items-end gap-2 md:grid-cols-[minmax(0,0.9fr)_minmax(0,0.9fr)_minmax(0,0.9fr)_minmax(0,1fr)_minmax(0,1.1fr)_auto]">
+                        <div>
+                          <FieldLabel>Precio total</FieldLabel>
+                          <input
+                            className={
+                              index > 0
+                                ? `${NUMBER_FIELD_CLASS} cursor-default bg-foreground/5 text-foreground/80`
+                                : NUMBER_FIELD_CLASS
+                            }
+                            value={row.totalPrice}
+                            placeholder="Precio total"
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            readOnly={index > 0}
+                            tabIndex={index > 0 ? -1 : undefined}
+                            onChange={(event) =>
+                              handleAbonoChange(
+                                index,
+                                'totalPrice',
+                                event.target.value,
+                              )
+                            }
+                          />
+                        </div>
+                        <div>
+                          <FieldLabel>Abono</FieldLabel>
+                          <input
+                            className={NUMBER_FIELD_CLASS}
+                            value={row.amount}
+                            placeholder="Abono"
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            onChange={(event) =>
+                              handleAbonoChange(
+                                index,
+                                'amount',
+                                event.target.value,
+                              )
+                            }
+                          />
+                        </div>
+                        <div>
+                          <FieldLabel>Saldo</FieldLabel>
+                          <input
+                            className={`${FIELD_CLASS} cursor-default bg-foreground/5 text-foreground/80`}
+                            value={row.balance}
+                            placeholder="Saldo"
+                            type="text"
+                            readOnly
+                            tabIndex={0}
+                            aria-label="Saldo"
+                          />
+                        </div>
+                        <div>
+                          <FieldLabel>Tipo de pago</FieldLabel>
+                          <AppSelect
+                            value={row.paymentType || 'none'}
+                            options={[
+                              { value: 'none', label: 'Tipo de pago' },
+                              ...PAYMENT_TYPE_OPTIONS,
+                            ]}
+                            placeholder="Tipo de pago"
+                            onValueChange={(paymentType) =>
+                              handleAbonoChange(
+                                index,
+                                'paymentType',
+                                paymentType === 'none' ? '' : paymentType,
+                              )
+                            }
+                          />
+                        </div>
+                        <div>
+                          <FieldLabel>Banco</FieldLabel>
+                          <AppSelect
+                            value={row.bank || 'none'}
+                            options={[
+                              { value: 'none', label: 'Seleccionar banco' },
+                              ...BANK_OPTIONS,
+                            ]}
+                            placeholder="Seleccionar banco"
+                            disabled={!isBankPayment}
+                            onValueChange={(bank) =>
+                              handleAbonoChange(
+                                index,
+                                'bank',
+                                bank === 'none' ? '' : bank,
+                              )
+                            }
+                          />
+                        </div>
                         <AppButton
                           type="button"
                           size="icon"
