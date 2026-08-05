@@ -1,18 +1,24 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { startTransition, useEffect, useMemo, useRef, useState } from 'react'
 import { FilePond, registerPlugin } from 'react-filepond'
 import FilePondPluginFileValidateType from 'filepond-plugin-file-validate-type'
-import FilePondPluginImageExifOrientation from 'filepond-plugin-image-exif-orientation'
 import FilePondPluginImagePreview from 'filepond-plugin-image-preview'
 import { ALLOWED_INPUT_IMAGE_TYPES } from './sanitizeProductImage'
 import { uploadProductImage } from '../services/inventoryService'
 import 'filepond/dist/filepond.min.css'
 import 'filepond-plugin-image-preview/dist/filepond-plugin-image-preview.css'
 
-registerPlugin(
-  FilePondPluginFileValidateType,
-  FilePondPluginImageExifOrientation,
-  FilePondPluginImagePreview,
-)
+let pluginsRegistered = false
+
+function ensureFilePondPlugins() {
+  if (pluginsRegistered) {
+    return
+  }
+
+  registerPlugin(FilePondPluginFileValidateType, FilePondPluginImagePreview)
+  pluginsRegistered = true
+}
+
+ensureFilePondPlugins()
 
 function toPondFiles(imageUrl) {
   if (!imageUrl) {
@@ -29,6 +35,10 @@ function toPondFiles(imageUrl) {
   ]
 }
 
+function getPondSource(file) {
+  return String(file?.serverId || file?.source || '').trim()
+}
+
 function ProductImagePond({
   imageUrl = '',
   userId,
@@ -40,6 +50,7 @@ function ProductImagePond({
   const onImageUrlChangeRef = useRef(onImageUrlChange)
   const onUploadingChangeRef = useRef(onUploadingChange)
   const userIdRef = useRef(userId)
+  const lastExternalUrlRef = useRef(String(imageUrl || ''))
 
   useEffect(() => {
     onImageUrlChangeRef.current = onImageUrlChange
@@ -52,6 +63,18 @@ function ProductImagePond({
   useEffect(() => {
     userIdRef.current = userId
   }, [userId])
+
+  useEffect(() => {
+    const nextUrl = String(imageUrl || '')
+    if (nextUrl === lastExternalUrlRef.current) {
+      return
+    }
+
+    lastExternalUrlRef.current = nextUrl
+    startTransition(() => {
+      setFiles(toPondFiles(nextUrl))
+    })
+  }, [imageUrl])
 
   const server = useMemo(
     () => ({
@@ -68,6 +91,7 @@ function ProductImagePond({
             }
 
             progress(true, 100, 100)
+            lastExternalUrlRef.current = String(publicUrl || '')
             onImageUrlChangeRef.current?.(publicUrl)
             load(publicUrl)
           })
@@ -80,6 +104,7 @@ function ProductImagePond({
               uploadError instanceof Error
                 ? uploadError.message
                 : 'No se pudo subir la imagen.'
+            lastExternalUrlRef.current = ''
             onImageUrlChangeRef.current?.('')
             error(message)
           })
@@ -131,10 +156,12 @@ function ProductImagePond({
         }
       },
       revert: (_uniqueFileId, load) => {
+        lastExternalUrlRef.current = ''
         onImageUrlChangeRef.current?.('')
         load()
       },
       remove: (_source, load) => {
+        lastExternalUrlRef.current = ''
         onImageUrlChangeRef.current?.('')
         load()
       },
@@ -146,7 +173,17 @@ function ProductImagePond({
     <div className="sange-filepond">
       <FilePond
         files={files}
-        onupdatefiles={setFiles}
+        onupdatefiles={(nextFiles) => {
+          startTransition(() => {
+            setFiles(nextFiles)
+          })
+
+          const nextUrl = getPondSource(nextFiles[0])
+          if (!nextUrl && lastExternalUrlRef.current) {
+            lastExternalUrlRef.current = ''
+            onImageUrlChangeRef.current?.('')
+          }
+        }}
         allowMultiple={false}
         maxFiles={1}
         acceptedFileTypes={[...ALLOWED_INPUT_IMAGE_TYPES]}
@@ -155,6 +192,9 @@ function ProductImagePond({
         credits={false}
         instantUpload
         server={server}
+        imagePreviewHeight={120}
+        imagePreviewMaxHeight={140}
+        stylePanelLayout="compact"
         labelIdle='Arrastra una imagen o <span class="filepond--label-action">Buscar</span>'
         labelFileProcessing="Validando y convirtiendo a WebP..."
         labelFileProcessingComplete="Imagen lista"

@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { useNavigate, useRouterState } from '@tanstack/react-router'
 import { FaClockRotateLeft, FaCashRegister, FaUserTie } from 'react-icons/fa6'
 import { FaSun, FaUsersCog } from 'react-icons/fa'
@@ -9,11 +10,16 @@ import { HiUserCircle } from 'react-icons/hi2'
 import { HiOutlineLogout } from "react-icons/hi";
 import { TbArrowBigUpFilled, TbUsersGroup } from 'react-icons/tb'
 import AppButton from '@/shared/AppButton'
-import AppSelect from '@/shared/select'
 import TitleName from '@/shared/TitleName'
 import { cn } from '@/lib/utils'
 import { useThemeStore } from '@/store/themeStore'
 import { useNotificationStore } from '@/store/notificationStore'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/animate-ui/components/radix/dropdown-menu'
 import {
   Sidebar,
   SidebarContent,
@@ -47,7 +53,7 @@ const navigationItems = [
   },
   {
     label: 'Caja',
-    href: '#caja',
+    to: '/dashboard/caja',
     icon: FaCashRegister,
   },
 ]
@@ -163,6 +169,23 @@ function NavItem({ item, isActive, isCollapsed, badgeCount = 0 }) {
   )
 }
 
+function handleUserMenuAction(action, { navigate, setTheme, onLogout }) {
+  if (action === 'profile') {
+    navigate({ to: '/dashboard/mi-perfil' })
+    return
+  }
+
+  if (action === 'light' || action === 'dark') {
+    // setTheme aplica al instante (sin View Transition), mas fiable desde el menu.
+    setTheme(action)
+    return
+  }
+
+  if (action === 'logout') {
+    onLogout?.()
+  }
+}
+
 function AppSidebar({ user, onLogout }) {
   const navigate = useNavigate()
   const { state, isMobile } = useSidebar()
@@ -173,6 +196,7 @@ function AppSidebar({ user, onLogout }) {
     select: (routerState) => routerState.location.pathname,
   })
   const unreadByCategory = useNotificationStore((store) => store.unreadByCategory)
+  const [userMenuOpen, setUserMenuOpen] = useState(false)
 
   // During logout, user becomes null before navigation finishes.
   if (!user) {
@@ -266,50 +290,68 @@ function AppSidebar({ user, onLogout }) {
             'group-data-[collapsible=icon]:flex group-data-[collapsible=icon]:size-10 group-data-[collapsible=icon]:items-center group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:overflow-visible group-data-[collapsible=icon]:rounded-full group-data-[collapsible=icon]:bg-transparent group-data-[collapsible=icon]:p-0 group-data-[collapsible=icon]:shadow-none group-data-[collapsible=icon]:ring-0',
           )}
         >
-          <AppSelect
-            side="top"
-            clearOnSelect
-            hideIndicator
-            ArrowIcon={TbArrowBigUpFilled}
-            arrowClassName="group-data-[collapsible=icon]:hidden"
-            options={userMenuOptions}
-            onValueChange={(action) => {
-              if (action === 'profile') {
-                navigate({ to: '/dashboard/mi-perfil' })
-                return
-              }
-
-              if (action === 'light' || action === 'dark') {
-                // setTheme aplica al instante (sin View Transition), mas fiable desde el Select.
-                setTheme(action)
-                return
-              }
-
-              if (action === 'logout') {
-                onLogout?.()
-              }
-            }}
-            className={cn(
-              'gap-3 rounded-xl border-transparent bg-transparent px-2 py-2 shadow-none hover:bg-foreground/6 focus:border-transparent focus:bg-foreground/6 focus:ring-0',
-              'group-data-[collapsible=icon]:size-10 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:gap-0 group-data-[collapsible=icon]:rounded-full group-data-[collapsible=icon]:p-0',
-            )}
-            contentClassName="rounded-xl"
-            triggerContent={
-              <>
+          <DropdownMenu modal={false} open={userMenuOpen} onOpenChange={setUserMenuOpen}>
+            <DropdownMenuTrigger
+              className={cn(
+                'flex h-auto w-full cursor-pointer items-center gap-3 rounded-xl border-transparent bg-transparent px-2 py-2 text-foreground outline-none',
+                'hover:bg-foreground/6 focus-visible:bg-foreground/6 focus-visible:ring-0',
+                'group-data-[collapsible=icon]:size-10 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:gap-0 group-data-[collapsible=icon]:rounded-full group-data-[collapsible=icon]:p-0',
+              )}
+            >
                 <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-[#1A2340] text-sm font-bold text-white shadow-sm dark:bg-primary dark:text-primary-foreground">
                   {getUserInitial(user)}
                 </span>
-                <span className="min-w-0 flex-1 text-left group-data-[collapsible=icon]:hidden">
-                  <span className="block truncate text-sm font-semibold text-foreground">
-                    {displayName}
-                  </span>
-                  <span className="block truncate text-[11px] font-medium text-foreground/45">
-                    {roleLabels[user.role] ?? 'Sin rol'}
-                  </span>
+              <span className="min-w-0 flex-1 text-left group-data-[collapsible=icon]:hidden">
+                <span className="block truncate text-sm font-semibold text-foreground">
+                  {displayName}
                 </span>
-              </>
-            }
-          />
+                <span className="block truncate text-[11px] font-medium text-foreground/45">
+                  {roleLabels[user.role] ?? 'Sin rol'}
+                </span>
+              </span>
+              <TbArrowBigUpFilled
+                className={cn(
+                  'size-4 shrink-0 text-foreground/55 transition-transform duration-200 group-data-[collapsible=icon]:hidden',
+                  userMenuOpen && 'rotate-180',
+                )}
+              />
+            </DropdownMenuTrigger>
+            <DropdownMenuContent
+              side="top"
+              align="start"
+              sideOffset={8}
+              highlight={false}
+              className="z-60 min-w-56 rounded-xl border border-border bg-surface text-foreground shadow-xl shadow-black/40"
+            >
+              {userMenuOptions.map((option) => {
+                const Icon = option.icon
+
+                return (
+                  <DropdownMenuItem
+                    key={option.value}
+                    highlight={false}
+                    className={cn(
+                      'cursor-pointer gap-2 bg-surface text-foreground',
+                      'focus:bg-primary/15 focus:text-amber-700 data-highlighted:bg-primary/15 data-highlighted:text-amber-700',
+                      'dark:focus:text-amber-400 dark:data-highlighted:text-amber-400',
+                      '[&_svg]:text-current',
+                      option.className,
+                    )}
+                    onSelect={() =>
+                      handleUserMenuAction(option.value, {
+                        navigate,
+                        setTheme,
+                        onLogout,
+                      })
+                    }
+                  >
+                    {Icon ? <Icon className="size-4 shrink-0" /> : null}
+                    {option.label}
+                  </DropdownMenuItem>
+                )
+              })}
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </SidebarFooter>
     </Sidebar>

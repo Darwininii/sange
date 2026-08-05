@@ -435,7 +435,7 @@ function TimePicker({
           id={panelId}
           role="dialog"
           aria-label={label || 'Selector de hora'}
-          className="absolute inset-x-0 z-40 mt-1.5 w-full max-w-70 rounded-xl border border-border bg-surface p-2 shadow-xl shadow-black/25"
+          className="absolute left-0 z-50 mt-1.5 w-70 rounded-xl border border-border bg-surface p-2 shadow-xl shadow-black/25"
         >
           <div className="mb-2 grid grid-cols-3 gap-1 px-1">
             <p className="text-center text-[11px] font-semibold text-foreground/55">

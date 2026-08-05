@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useMemo, useState } from 'react'
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from '@tanstack/react-router'
 import { FaFilePdf } from 'react-icons/fa6'
 import { IoAddCircle } from 'react-icons/io5'
@@ -33,7 +33,7 @@ import {
   createEmptyAbonoRow,
   createEmptyAbonos,
   formatAbonoDateTime,
-  normalizeAbonoRows,
+  prepareAbonosForSave,
   PAYMENT_TYPE_OPTIONS,
   recalculateAbonoChain,
 } from './orderAbonos'
@@ -79,13 +79,25 @@ import {
   updateOrder,
 } from '../services/orderService'
 import { useAuthStore } from '../store/authStore'
-import { invalidateUserCache } from '../store/dataCacheStore'
+import {
+  invalidateUserCache,
+  upsertOrdersCache,
+} from '../store/dataCacheStore'
 import { signOutUser } from '../utils/auth'
 
 const FIELD_CLASS =
   'w-full rounded-2xl border border-border bg-background px-4 py-3 outline-none focus:border-primary focus:bg-white dark:focus:bg-transparent/10 focus:ring-4 focus:ring-primary/20'
 
 const NUMBER_FIELD_CLASS = `${FIELD_CLASS} no-spinner`
+
+/** Compact control that fills its grid cell (same size for inputs and selects). */
+const ABONO_CONTROL_CLASS =
+  'box-border h-9 w-full min-w-0 rounded-2xl border border-border bg-background px-3 text-sm outline-none focus:border-primary focus:bg-white dark:focus:bg-transparent/10 focus:ring-4 focus:ring-primary/20'
+
+const ABONO_NUMBER_CONTROL_CLASS = `${ABONO_CONTROL_CLASS} no-spinner`
+
+const ABONO_SELECT_CLASS =
+  '!h-9 !w-full min-w-0 rounded-2xl px-3 py-0 data-[size=default]:!h-9'
 
 function FieldLabel({ children, required = false }) {
   return (
@@ -125,6 +137,7 @@ function OrderFormView({ mode = 'create', orderId = null }) {
   const logout = useAuthStore((state) => state.logout)
   const [form, setForm] = useState(INITIAL_ORDER_VALUES)
   const [orderUuid, setOrderUuid] = useState(null)
+  const savedAbonosRef = useRef([])
   /** Stock already deducted for this order (edit mode); used so validation allows keeping current qty. */
   const [reservedPartsUsage, setReservedPartsUsage] = useState({})
   const [technicianOptions, setTechnicianOptions] = useState([])
@@ -267,6 +280,7 @@ function OrderFormView({ mode = 'create', orderId = null }) {
           ...INITIAL_ORDER_VALUES,
           abonos: createEmptyAbonos(1),
         })
+        savedAbonosRef.current = []
         setOrderUuid(null)
         setReservedPartsUsage({})
         setIsLoadingOrder(false)
@@ -290,6 +304,9 @@ function OrderFormView({ mode = 'create', orderId = null }) {
 
         const formValues = getOrderFormValues(order)
         setForm(formValues)
+        savedAbonosRef.current = Array.isArray(formValues.abonos)
+          ? formValues.abonos.map((row) => ({ ...row }))
+          : []
         setReservedPartsUsage(getProductUsageFromParts(formValues.parts))
         setOrderUuid(order.uuid)
       } catch (error) {
@@ -600,10 +617,7 @@ function OrderFormView({ mode = 'create', orderId = null }) {
       purchaseDate: form.purchaseDate,
       symptom: '',
       parts: sanitizedParts,
-      abonos: normalizeAbonoRows(form.abonos, {
-        minRows: 1,
-        stampMissingDates: true,
-      }),
+      abonos: prepareAbonosForSave(form.abonos, savedAbonosRef.current),
     }
 
     setIsSubmitting(true)
@@ -635,25 +649,33 @@ function OrderFormView({ mode = 'create', orderId = null }) {
         }
       }
 
-      if (mode === 'edit') {
-        await appToast.promise(updateOrder(orderId, payload), {
-          loading: 'Actualizando orden...',
-          success: config.successMessage,
-          error: (error) => getErrorMessage(error, 'No se pudo actualizar la orden.'),
-        })
-      } else {
-        await appToast.promise(
-          createOrder(payload, { createdBy: user?.id }),
-          {
-            loading: 'Creando orden...',
-            success: config.successMessage,
-            error: (error) => getErrorMessage(error, 'No se pudo crear la orden.'),
-          },
-        )
-      }
+      const savedOrder =
+        mode === 'edit'
+          ? await appToast.promise(updateOrder(orderId, payload), {
+              loading: 'Actualizando orden...',
+              success: config.successMessage,
+              error: (error) =>
+                getErrorMessage(error, 'No se pudo actualizar la orden.'),
+            })
+          : await appToast.promise(
+              createOrder(payload, { createdBy: user?.id }),
+              {
+                loading: 'Creando orden...',
+                success: config.successMessage,
+                error: (error) =>
+                  getErrorMessage(error, 'No se pudo crear la orden.'),
+              },
+            )
 
       if (user?.id) {
-        invalidateUserCache(user.id, 'orders')
+        if (savedOrder) {
+          upsertOrdersCache(user.id, savedOrder)
+          savedAbonosRef.current = Array.isArray(savedOrder.abonos)
+            ? savedOrder.abonos.map((row) => ({ ...row }))
+            : []
+        } else {
+          invalidateUserCache(user.id, 'orders')
+        }
         invalidateUserCache(user.id, 'inventory-products')
         invalidateUserCache(user.id, 'clients')
       }
@@ -684,7 +706,7 @@ function OrderFormView({ mode = 'create', orderId = null }) {
       <div className="mx-auto max-w-7xl">
         <PageHeader title="Gestion de ordenes" />
 
-        <section className="mt-8 rounded-4xl border border-border bg-surface px-5 py-4 shadow-sm">
+        <section className="mt-2 rounded-4xl border border-border bg-surface px-5 py-4 shadow-sm md:mt-8">
           <div className="flex flex-wrap items-center justify-between gap-4">
             <div className="min-w-0">
               <h1 className="font-display text-2xl font-semibold text-foreground md:text-3xl">
@@ -1185,7 +1207,7 @@ function OrderFormView({ mode = 'create', orderId = null }) {
               </div>
             </form>
 
-            <section className="rounded-4xl bg-surface p-6 shadow-sm ring-1 ring-border">
+            <section className="min-w-0 rounded-4xl bg-surface p-6 shadow-sm ring-1 ring-border">
               <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
                 <FieldLabel>Abonos</FieldLabel>
                 <AppButton
@@ -1209,16 +1231,16 @@ function OrderFormView({ mode = 'create', orderId = null }) {
                   return (
                     <div
                       key={`abono-row-${index}-${row.registeredAt || index}`}
-                      className="space-y-1.5 rounded-xl bg-background/60 p-2 ring-1 ring-border/60"
+                      className="min-w-0 space-y-1.5 rounded-xl bg-background/60 p-2 ring-1 ring-border/60"
                     >
-                      <div className="grid items-end gap-2 md:grid-cols-[minmax(0,0.9fr)_minmax(0,0.9fr)_minmax(0,0.9fr)_minmax(0,1fr)_minmax(0,1.1fr)_auto]">
-                        <div>
+                      <div className="grid w-full min-w-0 items-end gap-2 grid-cols-[repeat(5,minmax(0,1fr))_auto]">
+                        <div className="min-w-0">
                           <FieldLabel>Precio total</FieldLabel>
                           <input
                             className={
                               index > 0
-                                ? `${NUMBER_FIELD_CLASS} cursor-default bg-foreground/5 text-foreground/80`
-                                : NUMBER_FIELD_CLASS
+                                ? `${ABONO_NUMBER_CONTROL_CLASS} cursor-default bg-foreground/5 text-foreground/80`
+                                : ABONO_NUMBER_CONTROL_CLASS
                             }
                             value={row.totalPrice}
                             placeholder="Precio total"
@@ -1236,10 +1258,10 @@ function OrderFormView({ mode = 'create', orderId = null }) {
                             }
                           />
                         </div>
-                        <div>
+                        <div className="min-w-0">
                           <FieldLabel>Abono</FieldLabel>
                           <input
-                            className={NUMBER_FIELD_CLASS}
+                            className={ABONO_NUMBER_CONTROL_CLASS}
                             value={row.amount}
                             placeholder="Abono"
                             type="number"
@@ -1254,10 +1276,10 @@ function OrderFormView({ mode = 'create', orderId = null }) {
                             }
                           />
                         </div>
-                        <div>
+                        <div className="min-w-0">
                           <FieldLabel>Saldo</FieldLabel>
                           <input
-                            className={`${FIELD_CLASS} cursor-default bg-foreground/5 text-foreground/80`}
+                            className={`${ABONO_CONTROL_CLASS} cursor-default bg-foreground/5 text-foreground/80`}
                             value={row.balance}
                             placeholder="Saldo"
                             type="text"
@@ -1266,9 +1288,10 @@ function OrderFormView({ mode = 'create', orderId = null }) {
                             aria-label="Saldo"
                           />
                         </div>
-                        <div>
+                        <div className="min-w-0">
                           <FieldLabel>Tipo de pago</FieldLabel>
                           <AppSelect
+                            className={ABONO_SELECT_CLASS}
                             value={row.paymentType || 'none'}
                             options={[
                               { value: 'none', label: 'Tipo de pago' },
@@ -1284,9 +1307,10 @@ function OrderFormView({ mode = 'create', orderId = null }) {
                             }
                           />
                         </div>
-                        <div>
+                        <div className="min-w-0">
                           <FieldLabel>Banco</FieldLabel>
                           <AppSelect
+                            className={ABONO_SELECT_CLASS}
                             value={row.bank || 'none'}
                             options={[
                               { value: 'none', label: 'Seleccionar banco' },
@@ -1308,7 +1332,7 @@ function OrderFormView({ mode = 'create', orderId = null }) {
                           size="icon"
                           variant="outline"
                           icon={TbTrashX}
-                          className="size-11 shrink-0 rounded-2xl text-red-500"
+                          className="size-9 shrink-0 rounded-2xl text-red-500"
                           tooltip="Quitar abono"
                           aria-label="Quitar fila de abono"
                           onClick={() => handleRemoveAbonoRow(index)}

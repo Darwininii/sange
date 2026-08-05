@@ -88,6 +88,11 @@ export function recalculateAbonoChain(rows) {
   })
 }
 
+function hasPaidAbonoAmount(value) {
+  const amount = parseMoney(value)
+  return amount !== null && amount > 0
+}
+
 export function normalizeAbonoRows(
   abonos,
   { minRows = 1, stampMissingDates = false } = {},
@@ -96,27 +101,37 @@ export function normalizeAbonoRows(
   const bankValues = new Set(BANK_OPTIONS.map((option) => option.value))
   const normalized = rows.map((row) => {
     const paymentType =
-      row?.paymentType === 'bank' || row?.paymentType === 'cash'
-        ? row.paymentType
+      row?.paymentType === 'bank' ||
+      row?.paymentType === 'cash' ||
+      row?.payment_type === 'bank' ||
+      row?.payment_type === 'cash'
+        ? row.paymentType || row.payment_type
         : ''
     const bankRaw = String(row?.bank ?? '').trim()
     const bank =
       paymentType === 'bank' && bankValues.has(bankRaw) ? bankRaw : ''
     const bankOther =
       paymentType === 'bank' && bank === 'otro'
-        ? String(row?.bankOther ?? '').trim()
+        ? String(row?.bankOther ?? row?.bank_other ?? '').trim()
         : ''
-    const registeredAt = String(row?.registeredAt ?? '').trim()
+    const amount = String(row?.amount ?? '').trim()
+    const registeredAt = String(
+      row?.registeredAt ?? row?.registered_at ?? '',
+    ).trim()
+    const isPaid = hasPaidAbonoAmount(amount)
 
     return {
-      totalPrice: String(row?.totalPrice ?? '').trim(),
-      amount: String(row?.amount ?? '').trim(),
+      totalPrice: String(row?.totalPrice ?? row?.total_price ?? '').trim(),
+      amount,
       balance: String(row?.balance ?? '').trim(),
       paymentType,
       bank,
       bankOther,
-      registeredAt:
-        stampMissingDates && !registeredAt
+      // Only stamp real payments. Empty abono rows must not get a phantom date
+      // (that would park later payments on the wrong caja day).
+      registeredAt: !isPaid
+        ? ''
+        : stampMissingDates && !registeredAt
           ? new Date().toISOString()
           : registeredAt,
     }
@@ -127,6 +142,42 @@ export function normalizeAbonoRows(
   }
 
   return recalculateAbonoChain(normalized)
+}
+
+/**
+ * Prepare abonos for persistence: stamp `registeredAt` when a row becomes a
+ * real payment (amount > 0 for the first time).
+ */
+export function prepareAbonosForSave(nextAbonos, previousAbonos = []) {
+  const previous = Array.isArray(previousAbonos) ? previousAbonos : []
+  const normalized = normalizeAbonoRows(nextAbonos, { minRows: 1 })
+  const nowIso = new Date().toISOString()
+
+  return normalized.map((row, index) => {
+    if (!hasPaidAbonoAmount(row.amount)) {
+      return { ...row, registeredAt: '' }
+    }
+
+    const previousRow = previous[index]
+    const previousWasPaid = hasPaidAbonoAmount(previousRow?.amount)
+    const previousRegisteredAt = String(
+      previousRow?.registeredAt ?? previousRow?.registered_at ?? '',
+    ).trim()
+
+    // New paid row, or first time this row receives money → register today.
+    if (!previousWasPaid || !row.registeredAt) {
+      return {
+        ...row,
+        registeredAt: previousWasPaid ? row.registeredAt || nowIso : nowIso,
+      }
+    }
+
+    // Keep original registration date for already-paid rows.
+    return {
+      ...row,
+      registeredAt: row.registeredAt || previousRegisteredAt || nowIso,
+    }
+  })
 }
 
 export function formatAbonoDateTime(iso) {

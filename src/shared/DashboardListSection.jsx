@@ -19,7 +19,7 @@ function DashboardListSection({
     <div className="mx-auto max-w-7xl">
       <PageHeader title={title} />
 
-      <section className="mt-8 rounded-4xl bg-surface p-6 shadow-sm ring-1 ring-border">
+      <section className="mt-2 rounded-4xl bg-surface p-6 shadow-sm ring-1 ring-border md:mt-8">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div className="min-w-0">
             <h3 className="font-display text-2xl font-semibold text-foreground">

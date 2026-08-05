@@ -122,3 +122,30 @@ export function invalidateUserCache(userId, cacheKey) {
 export function invalidateUserCacheByPrefix(userId, prefix) {
   useDataCacheStore.getState().invalidateByPrefix(userId, prefix)
 }
+
+/** Patch a single order into the shared `orders` cache (create or replace). */
+export function upsertOrdersCache(userId, order) {
+  if (!userId || !order) {
+    return
+  }
+
+  const store = useDataCacheStore.getState()
+  const current = store.getEntry(userId, 'orders')
+
+  if (!Array.isArray(current)) {
+    store.setEntry(userId, 'orders', [order])
+    return
+  }
+
+  const orderKey = order.uuid ?? order.id
+  const index = current.findIndex(
+    (row) => (row?.uuid ?? row?.id) === orderKey || row?.id === order.id,
+  )
+
+  const next =
+    index >= 0
+      ? current.map((row, rowIndex) => (rowIndex === index ? order : row))
+      : [order, ...current]
+
+  store.setEntry(userId, 'orders', next)
+}

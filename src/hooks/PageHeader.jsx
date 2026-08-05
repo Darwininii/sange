@@ -12,21 +12,22 @@ import { cn } from '@/lib/utils'
 import { useAuthStore } from '@/store/authStore'
 import { useNotificationStore } from '@/store/notificationStore'
 
-function DockBellButton({ badgeCount = 0 }) {
+function DockBellButton({ badgeCount = 0, compact = false }) {
   return (
     <div className="relative flex shrink-0 items-center justify-center">
       <PopoverButton
         aria-label="Notificaciones"
         title="Notificaciones"
         className={cn(
-          'relative flex size-10 cursor-pointer items-center justify-center rounded-full p-0 text-foreground shadow-lg shadow-black/30 outline-none',
+          'relative flex cursor-pointer items-center justify-center rounded-full p-0 text-foreground shadow-lg shadow-black/30 outline-none',
+          compact ? 'size-9' : 'size-10',
           'hover:bg-primary/60 hover:text-black hover:ring-black/80',
           'dark:ring-border dark:hover:bg-primary/15 dark:hover:text-accent dark:hover:ring-primary/40',
           'data-open:bg-primary/70 data-open:text-black data-open:ring-black/80',
           'dark:data-open:bg-primary/15 dark:data-open:text-accent dark:data-open:ring-primary/40',
         )}
       >
-        <HiOutlineBell className="size-6" />
+        <HiOutlineBell className={compact ? 'size-5' : 'size-6'} />
         <CustomBadge
           count={badgeCount}
           className="absolute -top-0.5 -right-0.5 size-5 min-w-5"
@@ -50,11 +51,12 @@ function NotificationsOpenEffect({ open, userId }) {
   return null
 }
 
-function PageHeader({ title, className = '' }) {
+function PageHeader({ title, className = '', variant = 'page' }) {
   const navigate = useNavigate()
   const user = useAuthStore((store) => store.user)
   const items = useNotificationStore((store) => store.items)
   const unreadTotal = useNotificationStore((store) => store.unreadTotal)
+  const isBar = variant === 'bar'
 
   const handleItemClick = (notification) => {
     if (notification?.href) {
@@ -71,9 +73,28 @@ function PageHeader({ title, className = '' }) {
   }
 
   return (
-    <section className={cn('flex justify-start py-3', className)}>
-      <div className="flex items-center gap-4 rounded-full bg-linear-to-br from-background to-surface py-1 pr-3 pl-6 shadow-xl shadow-black/30 ring-1 ring-border">
-        <h2 className="font-display text-base font-semibold tracking-tight whitespace-nowrap text-foreground md:text-lg">
+    <section
+      className={cn(
+        isBar
+          ? 'flex min-w-0 flex-1 items-center'
+          : 'hidden justify-start py-3 md:flex',
+        className,
+      )}
+    >
+      <div
+        className={cn(
+          'flex min-w-0 items-center rounded-full bg-linear-to-br from-background to-surface shadow-xl shadow-black/30 ring-1 ring-border',
+          isBar ? 'max-w-full gap-2 py-0.5 pr-1.5 pl-3' : 'gap-4 py-1 pr-3 pl-6',
+        )}
+      >
+        <h2
+          className={cn(
+            'font-display font-semibold tracking-tight text-foreground',
+            isBar
+              ? 'truncate text-sm'
+              : 'whitespace-nowrap text-base md:text-lg',
+          )}
+        >
           {title}
         </h2>
 
@@ -81,7 +102,7 @@ function PageHeader({ title, className = '' }) {
           {({ open }) => (
             <>
               <NotificationsOpenEffect open={open} userId={user?.id} />
-              <DockBellButton badgeCount={unreadTotal} />
+              <DockBellButton badgeCount={unreadTotal} compact={isBar} />
               <PopoverPanel
                 anchor={{ to: 'bottom end', gap: 12 }}
                 className="z-50 max-h-none w-auto overflow-visible border-0 bg-transparent p-0 shadow-none"

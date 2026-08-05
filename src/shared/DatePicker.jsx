@@ -3,11 +3,12 @@ import { FaCalendarDays } from 'react-icons/fa6'
 import { LuArrowBigRight } from 'react-icons/lu'
 import { TiArrowBackOutline } from 'react-icons/ti'
 import AppButton from './AppButton'
+import CustomBadge from './CustomBadge'
 import { cn } from '@/lib/utils'
 import 'cally'
 
 const FIELD_SHELL =
-  'flex h-auto w-full items-center gap-2 rounded-2xl border border-border bg-background px-3 py-2 outline-none transition focus-within:border-primary focus-within:ring-4 focus-within:ring-primary/20'
+  'relative flex w-full items-center rounded-2xl border border-border bg-background py-2.5 pl-3 pr-10 outline-none transition focus-within:border-primary focus-within:ring-4 focus-within:ring-primary/20'
 
 const MONTH_LABELS = [
   'enero',
@@ -63,6 +64,70 @@ function toIsoDate({ year, month, day }) {
   const safeDay = Math.min(day, lastDay)
 
   return `${year}-${String(month).padStart(2, '0')}-${String(safeDay).padStart(2, '0')}`
+}
+
+/** Normalize `markedDates` prop into a Map of ISO date → count. */
+function toMarkedCounts(markedDates) {
+  const map = new Map()
+
+  if (Array.isArray(markedDates)) {
+    for (const entry of markedDates) {
+      if (typeof entry === 'string') {
+        const key = entry.trim()
+        if (/^\d{4}-\d{2}-\d{2}$/.test(key)) {
+          map.set(key, (map.get(key) || 0) + 1)
+        }
+        continue
+      }
+
+      const key = String(entry?.date ?? '').trim()
+      const count = Number(entry?.count)
+      if (/^\d{4}-\d{2}-\d{2}$/.test(key) && Number.isFinite(count) && count > 0) {
+        map.set(key, count)
+      }
+    }
+    return map
+  }
+
+  if (markedDates && typeof markedDates === 'object') {
+    for (const [key, value] of Object.entries(markedDates)) {
+      const count = Number(value)
+      if (/^\d{4}-\d{2}-\d{2}$/.test(key) && Number.isFinite(count) && count > 0) {
+        map.set(key, count)
+      }
+    }
+  }
+
+  return map
+}
+
+/** Badge cells for the visible month grid (Monday-first, matches Cally). */
+function buildMonthBadgeCells(year, month, markedCounts) {
+  if (!markedCounts.size) {
+    return []
+  }
+
+  const daysInMonth = new Date(year, month, 0).getDate()
+  const mondayIndex = (new Date(year, month - 1, 1).getDay() + 6) % 7
+  const totalRows = Math.ceil((mondayIndex + daysInMonth) / 7)
+  const totalCells = totalRows * 7
+  const cells = []
+
+  for (let index = 0; index < totalCells; index += 1) {
+    const day = index - mondayIndex + 1
+    if (day < 1 || day > daysInMonth) {
+      cells.push({ key: `empty-${index}`, count: 0 })
+      continue
+    }
+
+    const dateKey = toIsoDate({ year, month, day })
+    cells.push({
+      key: dateKey,
+      count: markedCounts.get(dateKey) || 0,
+    })
+  }
+
+  return cells
 }
 
 function currentYear() {
@@ -208,9 +273,18 @@ function DatePicker({
   required = false,
   placeholder = 'Seleccionar fecha',
   disabled = false,
+  panelAlign = 'left',
+  /**
+   * Days with activity. Accepts:
+   * - `string[]` of ISO dates
+   * - `{ date, count }[]`
+   * - `Record<ISODate, count>`
+   */
+  markedDates = [],
 }) {
   const panelId = useId()
   const containerRef = useRef(null)
+  const calendarDateRef = useRef(null)
   const [open, setOpen] = useState(false)
   const [view, setView] = useState('days') // days | months | years
   const [inputFocused, setInputFocused] = useState(false)
@@ -222,6 +296,13 @@ function DatePicker({
   const focusedIso = toIsoDate(focused)
   const datePlaceholder =
     placeholder === 'Seleccionar fecha' ? 'dd/mm/aaaa' : placeholder
+
+  const markedCounts = useMemo(() => toMarkedCounts(markedDates), [markedDates])
+
+  const monthBadgeCells = useMemo(
+    () => buildMonthBadgeCells(focused.year, focused.month, markedCounts),
+    [focused.month, focused.year, markedCounts],
+  )
 
   const yearOptions = useMemo(
     () =>
@@ -329,7 +410,7 @@ function DatePicker({
   }
 
   return (
-    <div className="relative w-full" ref={containerRef}>
+    <div className="relative w-full overflow-visible" ref={containerRef}>
       {label ? <FieldLabel required={required}>{label}</FieldLabel> : null}
 
       <div
@@ -346,7 +427,7 @@ function DatePicker({
           value={text}
           placeholder={datePlaceholder}
           aria-label={label || 'Fecha'}
-          className="min-w-0 flex-1 cursor-text bg-transparent px-1 py-1 text-sm text-foreground outline-none placeholder:text-foreground/45 disabled:cursor-not-allowed"
+          className="min-w-0 flex-1 cursor-text bg-transparent text-sm text-foreground outline-none placeholder:text-foreground/45 disabled:cursor-not-allowed"
           onFocus={() => {
             setInputFocused(true)
             setText(formatDisplayDate(value) || text)
@@ -371,7 +452,7 @@ function DatePicker({
           disabled={disabled}
           icon={FaCalendarDays}
           tooltip="Elegir fecha"
-          className="size-9 shrink-0 cursor-pointer rounded-xl"
+          className="absolute right-1.5 top-1/2 size-7 -translate-y-1/2 cursor-pointer rounded-xl"
           aria-haspopup="dialog"
           aria-expanded={open}
           aria-controls={panelId}
@@ -397,7 +478,9 @@ function DatePicker({
           id={panelId}
           role="dialog"
           aria-label={label || 'Calendario'}
-          className="sange-date-picker absolute inset-x-0 z-40 mt-1.5 w-full max-w-70 rounded-xl border border-border bg-surface p-2 shadow-xl shadow-black/25"
+          className={`sange-date-picker absolute z-50 mt-1.5 w-70 rounded-xl border border-border bg-surface p-2 shadow-xl shadow-black/25 ${
+            panelAlign === 'right' ? 'right-0' : 'left-0'
+          }`}
         >
           {view === 'years' ? (
             <div className="grid gap-1">
@@ -569,31 +652,54 @@ function DatePicker({
                 </tbody>
               </table>
 
-              <calendar-date
-                value={value || undefined}
-                focused-date={focusedIso}
-                locale="es-CO"
-                onchange={(event) => {
-                  const nextValue = event.target?.value || ''
-                  onChange?.(nextValue)
-                  setOpen(false)
-                  setView('days')
-                }}
-                onfocusday={(event) => {
-                  const detail = event.detail
-                  if (!(detail instanceof Date) || Number.isNaN(detail.getTime())) {
-                    return
-                  }
+              <div className="relative">
+                <calendar-date
+                  ref={calendarDateRef}
+                  value={value || undefined}
+                  focused-date={focusedIso}
+                  locale="es-CO"
+                  onchange={(event) => {
+                    const nextValue = event.target?.value || ''
+                    onChange?.(nextValue)
+                    setOpen(false)
+                    setView('days')
+                  }}
+                  onfocusday={(event) => {
+                    const detail = event.detail
+                    if (!(detail instanceof Date) || Number.isNaN(detail.getTime())) {
+                      return
+                    }
 
-                  setFocused({
-                    year: detail.getFullYear(),
-                    month: detail.getMonth() + 1,
-                    day: detail.getDate(),
-                  })
-                }}
-              >
-                <calendar-month />
-              </calendar-date>
+                    setFocused({
+                      year: detail.getFullYear(),
+                      month: detail.getMonth() + 1,
+                      day: detail.getDate(),
+                    })
+                  }}
+                >
+                  <calendar-month />
+                </calendar-date>
+
+                {monthBadgeCells.some((cell) => cell.count > 0) ? (
+                  <div
+                    className="pointer-events-none absolute inset-0 grid grid-cols-7"
+                    style={{ gap: '0.15rem' }}
+                    aria-hidden="true"
+                  >
+                    {monthBadgeCells.map((cell) => (
+                      <div key={cell.key} className="relative min-h-[1.65rem]">
+                        {cell.count > 0 ? (
+                          <CustomBadge
+                            dot
+                            animate={false}
+                            className="absolute top-0 right-0 z-10 size-2"
+                          />
+                        ) : null}
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
             </>
           ) : null}
 

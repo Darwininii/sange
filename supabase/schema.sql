@@ -341,3 +341,32 @@ alter table public.orders
 
 create index if not exists orders_assigned_technician_scheduled_at_idx
 on public.orders (assigned_technician_id, scheduled_at);
+
+-- Caja / finanzas
+create table if not exists public.cash_closes (
+  id uuid primary key default gen_random_uuid(),
+  close_date date not null unique,
+  closed_at timestamptz not null default now(),
+  closed_by uuid references public.profiles(id) on delete set null,
+  cash_total numeric(14, 2) not null default 0,
+  bank_total numeric(14, 2) not null default 0,
+  income_total numeric(14, 2) not null default 0,
+  expense_total numeric(14, 2) not null default 0,
+  net_total numeric(14, 2) not null default 0,
+  notes text not null default '',
+  snapshot jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now()
+);
+
+create table if not exists public.cash_entries (
+  id uuid primary key default gen_random_uuid(),
+  kind text not null check (kind in ('income', 'expense')),
+  amount numeric(14, 2) not null check (amount > 0),
+  payment_type text not null default 'cash' check (payment_type in ('cash', 'bank')),
+  bank text not null default '',
+  concept text not null,
+  occurred_on date not null default (timezone('America/Bogota', now()))::date,
+  created_by uuid references public.profiles(id) on delete set null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);

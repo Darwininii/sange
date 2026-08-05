@@ -22,6 +22,8 @@ function CustomBadge({
   className,
   animate = true,
   color = 'neutral',
+  /** Renders only the circle (no count text). */
+  dot = false,
 }) {
   if (label) {
     return (
@@ -35,6 +37,20 @@ function CustomBadge({
       >
         {label}
       </span>
+    )
+  }
+
+  if (dot) {
+    return (
+      <span
+        aria-hidden="true"
+        className={cn(
+          'block shrink-0 rounded-full',
+          animate && 'transition duration-200 hover:scale-110',
+          colorStyles.default,
+          className,
+        )}
+      />
     )
   }
 

@@ -207,12 +207,12 @@ function DashboardMyProfilePage() {
         )}
 
         {isLoading ? (
-          <div className="mt-8 flex justify-center rounded-4xl bg-surface p-8 shadow-sm ring-1 ring-border">
+          <div className="mt-2 flex justify-center rounded-4xl bg-surface p-8 shadow-sm ring-1 ring-border md:mt-8">
             <Loader label="Cargando perfil..." />
           </div>
         ) : (
           <>
-            <section className="mt-8 rounded-4xl bg-surface p-6 shadow-sm ring-1 ring-border xl:mx-auto xl:max-w-2xl">
+            <section className="mt-2 rounded-4xl bg-surface p-6 shadow-sm ring-1 ring-border md:mt-8 xl:mx-auto xl:max-w-2xl">
               <h3 className="font-display text-2xl font-semibold text-foreground">
                 Datos personales
               </h3>

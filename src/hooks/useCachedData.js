@@ -163,6 +163,36 @@ export function useCachedData({
     })
   }, [cacheKey, enabled, loadData, userId])
 
+  // Stay in sync when another screen patches/invalidates this cache key.
+  useEffect(() => {
+    if (!enabled || !userId) {
+      return undefined
+    }
+
+    const scopedKey = `${cacheKey}:${userId}`
+
+    return useDataCacheStore.subscribe((state, prevState) => {
+      const nextEntry = state.entries[scopedKey]
+      const prevEntry = prevState.entries[scopedKey]
+
+      if (nextEntry === prevEntry) {
+        return
+      }
+
+      if (nextEntry?.userId === userId) {
+        setData(nextEntry.data)
+        setError(null)
+        setIsLoading(false)
+        setIsRefreshing(false)
+        return
+      }
+
+      if (prevEntry && !nextEntry) {
+        loadData({ silent: true, force: true }).catch(() => {})
+      }
+    })
+  }, [cacheKey, enabled, loadData, userId])
+
   const hasCache = userId ? getEntry(userId, cacheKey) !== null : false
 
   return {

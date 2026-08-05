@@ -33,7 +33,7 @@ function RoleDashboard({ dashboard }) {
     <div className="mx-auto max-w-7xl">
       <PageHeader title={dashboard.title} />
 
-      <section className="mt-8 grid gap-4 md:grid-cols-3">
+      <section className="mt-2 grid gap-4 md:mt-8 md:grid-cols-3">
         {dashboard.stats.map((stat) => (
           <StatCard stat={stat} key={stat.label} />
         ))}

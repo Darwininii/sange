@@ -146,7 +146,7 @@ function ViewOrderPage() {
       <div className="mx-auto max-w-7xl">
         <PageHeader title="Detalle de orden" />
 
-        <section className="mt-8 rounded-4xl border border-border bg-surface px-5 py-4 shadow-sm">
+        <section className="mt-2 rounded-4xl border border-border bg-surface px-5 py-4 shadow-sm md:mt-8">
           <div className="flex flex-wrap items-center justify-between gap-4">
             <div className="min-w-0">
               <h3 className="font-display text-2xl font-semibold text-foreground md:text-3xl">

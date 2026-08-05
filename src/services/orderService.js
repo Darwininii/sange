@@ -340,6 +340,7 @@ export async function createOrder(orderData, { createdBy } = {}) {
     },
   })
 
+  notifyOrdersChangeListeners()
   return created
 }
 
@@ -396,6 +397,7 @@ export async function updateOrder(orderId, orderData) {
     },
   })
 
+  notifyOrdersChangeListeners()
   return updated
 }
 
@@ -673,5 +675,70 @@ export function subscribeOrderDiagnosisChanges(orderUuid, onDiagnosisChange) {
 
   return () => {
     supabase.removeChannel(channel)
+  }
+}
+
+const ordersChangeListeners = new Set()
+let ordersChangesChannel = null
+let ordersChangesTimer = null
+
+function notifyOrdersChangeListeners() {
+  if (ordersChangesTimer != null) {
+    window.clearTimeout(ordersChangesTimer)
+  }
+
+  ordersChangesTimer = window.setTimeout(() => {
+    ordersChangesTimer = null
+    ordersChangeListeners.forEach((listener) => {
+      try {
+        listener()
+      } catch {
+        // Ignore listener errors so one bad subscriber cannot break others.
+      }
+    })
+  }, 150)
+}
+
+/**
+ * Shared Realtime + local subscription for order list changes (Caja, Ordenes).
+ * @param {() => void} onChange
+ * @returns {() => void} unsubscribe
+ */
+export function subscribeOrdersChanges(onChange) {
+  if (!isSupabaseConfigured || !supabase || typeof onChange !== 'function') {
+    return () => {}
+  }
+
+  ordersChangeListeners.add(onChange)
+
+  if (!ordersChangesChannel) {
+    ordersChangesChannel = supabase
+      .channel('orders-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'orders',
+        },
+        () => {
+          notifyOrdersChangeListeners()
+        },
+      )
+      .subscribe()
+  }
+
+  return () => {
+    ordersChangeListeners.delete(onChange)
+
+    if (ordersChangeListeners.size === 0 && ordersChangesChannel) {
+      if (ordersChangesTimer != null) {
+        window.clearTimeout(ordersChangesTimer)
+        ordersChangesTimer = null
+      }
+
+      supabase.removeChannel(ordersChangesChannel)
+      ordersChangesChannel = null
+    }
   }
 }

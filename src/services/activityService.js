@@ -18,6 +18,9 @@ export const activityActions = {
   order_create: 'order_create',
   order_update: 'order_update',
   order_message: 'order_message',
+  caja_entry_create: 'caja_entry_create',
+  caja_entry_delete: 'caja_entry_delete',
+  caja_close: 'caja_close',
 }
 
 const SESSION_ACTIVITY_KEY_PREFIX = 'sange:activity-session:'
@@ -308,6 +311,14 @@ export function getActivityMessage(activity) {
         : targetSuffix
       return `${userName} envio un mensaje en la orden${orderRef}`
     }
+    case activityActions.caja_entry_create:
+      return `${userName} registro un movimiento de caja${targetSuffix}`
+    case activityActions.caja_entry_delete:
+      return `${userName} elimino un movimiento de caja${targetSuffix}`
+    case activityActions.caja_close:
+      return `${userName} cerro la caja del dia${
+        metadata.closeDate ? ` ${metadata.closeDate}` : ''
+      }`
     default:
       return `${userName} realizo una actividad`
   }

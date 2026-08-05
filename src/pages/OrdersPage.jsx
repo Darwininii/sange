@@ -37,6 +37,7 @@ import { usePagination } from '../hooks/usePagination'
 import {
   getOrders,
   isOrderVisibleToTechnician,
+  subscribeOrdersChanges,
 } from '../services/orderService'
 import { useAuthStore } from '../store/authStore'
 import { signOutUser } from '../utils/auth'
@@ -133,6 +134,8 @@ function OrdersPage() {
     cacheKey: 'orders',
     fetcher: getOrders,
     enabled: Boolean(user?.id),
+    refetchOnFocus: true,
+    subscribe: subscribeOrdersChanges,
   })
 
   const userId = user?.id

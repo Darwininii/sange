@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { lazy, Suspense, useEffect, useMemo, useState } from 'react'
 import { useNavigate } from '@tanstack/react-router'
 import { IoSearchCircleSharp } from 'react-icons/io5'
 import { PiPackageFill } from 'react-icons/pi'
@@ -10,7 +10,6 @@ import ConfirmActions from '../shared/ConfirmActions'
 import DashboardListSection from '../shared/DashboardListSection'
 import AppDialog from '../shared/dialog'
 import Pagination from '../shared/Pagination'
-import ProductImagePond from '../shared/ProductImagePond'
 import ProfileActionButton from '../shared/ProfileActionButton'
 import {
   Table,
@@ -36,6 +35,8 @@ import {
 import { useAuthStore } from '../store/authStore'
 import { invalidateUserCache } from '../store/dataCacheStore'
 import { signOutUser } from '../utils/auth'
+
+const ProductImagePond = lazy(() => import('../shared/ProductImagePond'))
 
 const FIELD_CLASS =
   'w-full rounded-2xl border border-border bg-background px-4 py-3 outline-none focus:border-primary focus:bg-white dark:focus:bg-transparent/10 focus:ring-4 focus:ring-primary/20'
@@ -166,14 +167,22 @@ function ProductFormFields({
 
       <div>
         <FieldLabel>Imagen</FieldLabel>
-        <ProductImagePond
-          key={pondKey}
-          imageUrl={values.imageUrl}
-          userId={userId}
-          disabled={disabled}
-          onImageUrlChange={onImageUrlChange}
-          onUploadingChange={onUploadingChange}
-        />
+        <Suspense
+          fallback={
+            <div className="rounded-2xl border border-dashed border-border px-4 py-8 text-center text-sm text-foreground/55">
+              Cargando cargador de imagen...
+            </div>
+          }
+        >
+          <ProductImagePond
+            key={pondKey}
+            imageUrl={values.imageUrl}
+            userId={userId}
+            disabled={disabled}
+            onImageUrlChange={onImageUrlChange}
+            onUploadingChange={onUploadingChange}
+          />
+        </Suspense>
       </div>
     </div>
   )

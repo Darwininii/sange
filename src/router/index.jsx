@@ -6,6 +6,7 @@ import {
   redirect,
 } from '@tanstack/react-router'
 import App from '../App'
+import DashboardCajaPage from '../pages/DashboardCajaPage'
 import DashboardClientsPage from '../pages/DashboardClientsPage'
 import DashboardSuppliersPage from '../pages/DashboardSuppliersPage'
 import DashboardHistoryPage from '../pages/DashboardHistoryPage'
@@ -142,6 +143,15 @@ const dashboardInventoryRoute = createRoute({
   component: DashboardInventoryPage,
 })
 
+const dashboardCajaRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/dashboard/caja',
+  beforeLoad: async () => {
+    await requireDashboardUser({ blockedRoles: ['technician'] })
+  },
+  component: DashboardCajaPage,
+})
+
 const dashboardOrdersRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/dashboard/orders',
@@ -187,6 +197,7 @@ const routeTree = rootRoute.addChildren([
   dashboardClientsRoute,
   dashboardSuppliersRoute,
   dashboardInventoryRoute,
+  dashboardCajaRoute,
   dashboardOrdersRoute,
   dashboardNewOrderRoute,
   dashboardEditOrderRoute,
